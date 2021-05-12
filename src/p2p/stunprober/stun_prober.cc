@@ -78,7 +78,7 @@ class StunProber::Requester : public sigslot::has_slots<> {
                               const char* buf,
                               size_t size,
                               const rtc::SocketAddress& addr,
-                              const int64_t& packet_time_us,int pathid);
+                              const int64_t& packet_time_us);
 
   const std::vector<Request*>& requests() { return requests_; }
 
@@ -119,7 +119,7 @@ StunProber::Requester::Requester(
       server_ips_(server_ips),
       thread_checker_(prober->thread_checker_) {
   socket_->SignalReadPacket.connect(
-      this, &StunProber::Requester::OnStunResponseReceived);//sandy: Since STUN I will give it to path=1
+      this, &StunProber::Requester::OnStunResponseReceived);
 }
 
 StunProber::Requester::~Requester() {
@@ -205,7 +205,7 @@ void StunProber::Requester::OnStunResponseReceived(
     const char* buf,
     size_t size,
     const rtc::SocketAddress& addr,
-    const int64_t& /* packet_time_us */,int pathid) {
+    const int64_t& /* packet_time_us */) {
   RTC_DCHECK(thread_checker_.IsCurrent());
   RTC_DCHECK(socket_);
   Request* request = GetRequestByAddress(addr.ipaddr());

@@ -734,7 +734,7 @@ void TurnPort::OnReadPacket(rtc::AsyncPacketSocket* socket,
                             const char* data,
                             size_t size,
                             const rtc::SocketAddress& remote_addr,
-                            const int64_t& packet_time_us,int pathid) {
+                            const int64_t& packet_time_us) {
   HandleIncomingPacket(socket, data, size, remote_addr, packet_time_us);
 }
 

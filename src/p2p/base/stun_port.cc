@@ -345,7 +345,7 @@ bool UDPPort::HandleIncomingPacket(rtc::AsyncPacketSocket* socket,
                                    const rtc::SocketAddress& remote_addr,
                                    int64_t packet_time_us) {
   // All packets given to UDP port will be consumed.
-  OnReadPacket(socket, data, size, remote_addr, packet_time_us,1);//sandy: since I do not know set as 1
+  OnReadPacket(socket, data, size, remote_addr, packet_time_us);
   return true;
 }
 
@@ -390,7 +390,7 @@ void UDPPort::OnReadPacket(rtc::AsyncPacketSocket* socket,
                            const char* data,
                            size_t size,
                            const rtc::SocketAddress& remote_addr,
-                           const int64_t& packet_time_us,int pathid) {
+                           const int64_t& packet_time_us) {
   RTC_DCHECK(socket == socket_);
   RTC_DCHECK(!remote_addr.IsUnresolvedIP());
 

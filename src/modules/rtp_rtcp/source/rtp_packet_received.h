@@ -63,19 +63,13 @@ class RtpPacketReceived : public RtpPacket {
   void set_application_data(rtc::ArrayView<const uint8_t> data) {
     application_data_.assign(data.begin(), data.end());
   }
-  void set_pathid(int pathid){//sandy
-    pathid_=pathid;
-  }
-  int get_pathid() const{//sandy
-    return pathid_;
-  }
+  int pathid=0;//sandy: This pathid is the connection level unlike the RTP packet subflow_id
  private:
   NtpTime capture_time_;
   int64_t arrival_time_ms_ = 0;
   int payload_type_frequency_ = 0;
   bool recovered_ = false;
   std::vector<uint8_t> application_data_;
-  int pathid_=0;//sandy
 };
 
 }  // namespace webrtc

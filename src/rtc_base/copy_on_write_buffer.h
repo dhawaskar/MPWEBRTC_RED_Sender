@@ -260,8 +260,12 @@ class RTC_EXPORT CopyOnWriteBuffer {
     slice.size_ = length;
     return slice;
   }
-  
-
+  int GetPathid(){
+    return pathid_;
+  }
+  void SetPathid(int pathid){
+    pathid_=pathid;
+  }
  private:
   // Create a copy of the underlying data if it is referenced from other Buffer
   // objects or there is not enough capacity.
@@ -284,6 +288,7 @@ class RTC_EXPORT CopyOnWriteBuffer {
                    // Should be 0 if the buffer_ is empty.
   size_t size_;    // Size of a current slice in the original data in buffer_.
                    // Should be 0 if the buffer_ is empty.
+  int pathid_;
 };
 
 }  // namespace rtc

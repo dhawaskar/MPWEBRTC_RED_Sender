@@ -49,7 +49,6 @@
 #include "rtc_base/third_party/base64/base64.h"
 #include "api/mp_collector.h"
 #include "api/mp_global.h"
-
 using cricket::AudioContentDescription;
 using cricket::Candidate;
 using cricket::Candidates;
@@ -112,7 +111,6 @@ static const char kLineTypeAttributes = 'a';
 // Attributes
 static const char kAttributeGroup[] = "group";
 static const char kAttributeMid[] = "mid";
-static const char kMpScheduler[] = "scheduler";//sandy Round Robin Scheduler
 static const char kAttributeMsid[] = "msid";
 static const char kAttributeBundleOnly[] = "bundle-only";
 static const char kAttributeRtcpMux[] = "rtcp-mux";
@@ -165,6 +163,7 @@ static const int kDefaultSctpMaxMessageSize = 65536;
 // draft-ietf-mmusic-sdp-simulcast-13
 // a=simulcast
 static const char kAttributeSimulcast[] = "simulcast";
+static const char kMpScheduler[] = "scheduler";//sandy
 // draft-ietf-mmusic-rid-15
 // a=rid
 static const char kAttributeRid[] = "rid";
@@ -1563,9 +1562,8 @@ void BuildMediaDescription(const ContentInfo* content_info,
   }
   //sandy: add the scheduler
   InitAttrLine(kMpScheduler, &os);
-  os << kSdpDelimiterColon << "rr";
-  AddLine(os.str(), message);
-
+  os << kSdpDelimiterColon << "red";
+  AddLine(os.str(), message);  
 }
 
 void BuildRtpContentAttributes(const MediaContentDescription* media_desc,
@@ -2843,7 +2841,6 @@ bool ParseMediaDescription(
     ParseFailed(message, *pos, "Expects m line.", error);
     return false;
   }
-
   return true;
 }
 
@@ -3329,8 +3326,7 @@ bool ParseContent(const std::string& message,
             mpcollector_->MpSetScheduler(scheduler);
           // RTC_LOG(INFO)<<"sandystats the scheduler is "<<scheduler;
         }
-
-      }else {
+      } else {
         // Unrecognized attribute in RTP protocol.
         RTC_LOG(LS_INFO) << "Ignored line: " << line;
         continue;

@@ -128,7 +128,6 @@ bool StreamStatisticianImpl::UpdateOutOfOrder(const RtpPacketReceived& packet,
 void StreamStatisticianImpl::UpdateCounters(const RtpPacketReceived& packet) {
 
 
-  RTC_DCHECK(packet.get_pathid()>0);
   rtc::CritScope cs(&stream_lock_);
   // RTC_LOG(INFO)<<"sandy the received packet path="<<packet.subflow_id<<" seq= "<<packet.SequenceNumber()<<
   // " mp_seq= "<<packet.subflow_seq<<" payload type"<<packet.PayloadType()<<"\n";

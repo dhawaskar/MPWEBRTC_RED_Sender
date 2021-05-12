@@ -145,6 +145,10 @@ class FakeNetworkPipe : public SimulatedPacketReceiverInterface {
   // fake network pipe.
   PacketReceiver::DeliveryStatus DeliverPacket(MediaType media_type,
                                                rtc::CopyOnWriteBuffer packet,
+                                               int64_t packet_time_us) override;
+
+  PacketReceiver::DeliveryStatus MpDeliverPacket(MediaType media_type,
+                                               rtc::CopyOnWriteBuffer packet,
                                                int64_t packet_time_us,int pathid) override;
 
   // TODO(bugs.webrtc.org/9584): Needed to inherit the alternative signature for

@@ -603,9 +603,8 @@ template <typename A1,
           typename A3,
           typename A4,
           typename A5,
-	  typename A6,//sandy I added this
           typename mt_policy = SIGSLOT_DEFAULT_MT_POLICY>
-using signal5 = signal_with_thread_policy<mt_policy, A1, A2, A3, A4, A5,A6>;
+using signal5 = signal_with_thread_policy<mt_policy, A1, A2, A3, A4, A5>;
 
 template <typename A1,
           typename A2,

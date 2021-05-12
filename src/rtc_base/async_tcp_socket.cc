@@ -336,7 +336,7 @@ void AsyncTCPSocket::ProcessInput(char* data, size_t* len) {
       return;
 
     SignalReadPacket(this, data + kPacketLenSize, pkt_len, remote_addr,
-                     TimeMicros(),1);//sandy TCP async data red
+                     TimeMicros());
 
     *len -= kPacketLenSize + pkt_len;
     if (*len > 0) {

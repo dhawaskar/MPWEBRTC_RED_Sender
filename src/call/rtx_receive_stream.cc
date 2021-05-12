@@ -58,6 +58,7 @@ void RtxReceiveStream::OnRtpPacket(const RtpPacketReceived& rtx_packet) {
     return;
   }
   RtpPacketReceived media_packet;
+  media_packet.pathid=rtx_packet.pathid;//sandy
   media_packet.CopyHeaderFrom(rtx_packet);
 
   media_packet.SetSsrc(media_ssrc_);
@@ -65,9 +66,6 @@ void RtxReceiveStream::OnRtpPacket(const RtpPacketReceived& rtx_packet) {
   media_packet.SetPayloadType(it->second);
   media_packet.set_recovered(true);
   media_packet.set_arrival_time_ms(rtx_packet.arrival_time_ms());
-  //sandy: Copyt the path infomration as well
-  RTC_DCHECK(rtx_packet.get_pathid()>0);
-  media_packet.set_pathid(rtx_packet.get_pathid()>0);
 
   // Skip the RTX header.
   rtc::ArrayView<const uint8_t> rtx_payload = payload.subview(kRtxHeaderSize);

@@ -1583,7 +1583,7 @@ void AllocationSequence::OnReadPacket(rtc::AsyncPacketSocket* socket,
                                       const char* data,
                                       size_t size,
                                       const rtc::SocketAddress& remote_addr,
-                                      const int64_t& packet_time_us,int pathid) {
+                                      const int64_t& packet_time_us) {
   RTC_DCHECK(socket == udp_socket_.get());
 
   bool turn_port_found = false;

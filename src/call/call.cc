@@ -231,9 +231,12 @@ class Call final : public webrtc::Call,
   RtpTransportControllerSendInterface* GetTransportControllerSend() override;
 
   Stats GetStats() const override;
-
   // Implements PacketReceiver.
   DeliveryStatus DeliverPacket(MediaType media_type,
+                               rtc::CopyOnWriteBuffer packet,
+                               int64_t packet_time_us) override;
+  // Implements PacketReceiver.
+  DeliveryStatus MpDeliverPacket(MediaType media_type,
                                rtc::CopyOnWriteBuffer packet,
                                int64_t packet_time_us,int pathid) override;
 
@@ -1288,10 +1291,16 @@ PacketReceiver::DeliveryStatus Call::DeliverRtcp(MediaType media_type,
 PacketReceiver::DeliveryStatus Call::DeliverRtp(MediaType media_type,
                                                 rtc::CopyOnWriteBuffer packet,
                                                 int64_t packet_time_us,int pathid) {
-  TRACE_EVENT0("webrtc", "Call::DeliverRtp");
+
+  // RTC_LOG(INFO)<<"sandystats doing DTLS received packet "<<pathid;
   RTC_DCHECK(pathid>0);
+  TRACE_EVENT0("webrtc", "Call::DeliverRtp");
+  
+
+
   RtpPacketReceived parsed_packet;
-  parsed_packet.set_pathid(pathid);
+  parsed_packet.pathid=pathid;
+
   if (!parsed_packet.Parse(std::move(packet)))
     return DELIVERY_PACKET_ERROR;
 
@@ -1330,12 +1339,17 @@ PacketReceiver::DeliveryStatus Call::DeliverRtp(MediaType media_type,
   parsed_packet.IdentifyExtensions(it->second.extensions);
 
 
-  // RTPHeader header;
-  // parsed_packet.GetHeader(&header);
-  // RTC_LOG(INFO)<<"sandystats received RTP path= "<< 
-  //     header.extension.sandy<<" connection pathid= "<<parsed_packet.get_pathid();
+  /*sandy:check connection level pathid and RTP level pathid. In Redundant scheduler it will be different and hence
+  it needs to be reset
+  */
+  RTPHeader header;
+  parsed_packet.GetHeader(&header);
+  if(header.extension.sandy!=pathid){
+    RTC_LOG(INFO)<<"sandy: This must Redundant scheduler\n";
+    header.extension.sandy=pathid;
+    parsed_packet.subflow_id=pathid;
+  }
 
-      
   NotifyBweOfReceivedPacket(parsed_packet, media_type);
 
   // RateCounters expect input parameter as int, save it as int,
@@ -1355,6 +1369,119 @@ PacketReceiver::DeliveryStatus Call::DeliverRtp(MediaType media_type,
       return DELIVERY_OK;
     }
   } else if (media_type == MediaType::VIDEO) {
+
+
+    // //sandy: Adding the media OFO
+    // if(mpcollector_ && mpcollector_->MpISsecondPathOpen()){
+    //   RTPHeader header;
+    //   parsed_packet.GetHeader(&header);
+    //   // RTC_LOG(INFO)<<"sandymediaofo the multipath WebRTC has been enabled seq="<<header.sequenceNumber<<" path= "<< 
+    //   // header.extension.sandy<<" subflow seq "<<header.extension.mpflowseqnum;
+      
+    //   if(!MpMediaseq_){
+    //     MpMediaseq_=header.sequenceNumber;
+    //   }
+    //   /*
+    //   sandy: How to differentiate retransmitted and out of order pacekt? Use transportsequence number. 
+    //   For retransmitted packet the transport sequence number is always higher and for out of order the transport sequence 
+    //   number is always smaller. Ex: Packets arrived in order 32,34,31,33. In this case starting sequence should be 31 not 
+    //   32. Since 31 is out of order packet,its transport sequence is smaller than the 32 and hence we can start at 31. If 
+    //   31 is retransmitted sequence number we should simply send it to upper layer directly.
+    //   */
+    //   if(header.sequenceNumber<MpMediaseq_){
+    //     auto it=MpMediahistory_.find(MpMediaseq_);
+    //     if(it!=MpMediahistory_.end()){
+    //       RTPHeader Mpheader;
+    //       it->second.GetHeader(&Mpheader); 
+    //       if(header.extension.transportSequenceNumber < Mpheader.extension.transportSequenceNumber){
+    //         MpMediaseq_=header.sequenceNumber;
+    //       }
+    //       else{
+    //         //sandy:send it to video receive controller as it is lost packet.
+    //         // RTC_LOG(INFO)<<"sandymediaofo the retransmitted packet must be sent directly";
+    //         parsed_packet.set_payload_type_frequency(kVideoPayloadTypeFrequency);
+    //         if(video_receiver_controller_.OnRtpPacket(parsed_packet)){
+    //           received_bytes_per_second_counter_.Add(length);
+    //           received_video_bytes_per_second_counter_.Add(length);
+    //           event_log_->Log(
+    //               std::make_unique<RtcEventRtpPacketIncoming>(parsed_packet));
+    //           const int64_t arrival_time_ms = parsed_packet.arrival_time_ms();
+    //           if (!first_received_rtp_video_ms_) {
+    //             first_received_rtp_video_ms_.emplace(arrival_time_ms);
+    //           }
+    //           last_received_rtp_video_ms_.emplace(arrival_time_ms);
+    //           return DELIVERY_OK;      
+    //         }
+    //         //sandy: This packet is lost even after waiting for such long time so just drop it 
+    //         //return DELIVERY_OK;
+    //       }
+    //     }
+    //   }
+    //   MpMediahistory_.insert(std::make_pair(header.sequenceNumber,parsed_packet));
+    //   MpMediacount_++;
+    //   // RTC_LOG(INFO)<<"sandymediaofo let us insert the media RTP "<<header.sequenceNumber<<" count "<<MpMediacount_<< 
+    //   // " limit "<<MpMediaReorderingCount_;
+    //   if(MpMediacount_>MpMediaReorderingCount_){
+    //     MpMediaseqnext=MpMediaseq_;
+    //     // RTC_LOG(INFO)<<"sandymediaofo let us send the media RTP to video controller "<<MpMediaseqnext;
+    //     int i;
+    //     for(i=0;i<=MpMediaReorderingCount_;i++){
+    //       auto it=MpMediahistory_.find(MpMediaseqnext);
+    //       if(it!=MpMediahistory_.end()){
+    //         if(MpMediaseqlastlost==MpMediaseqnext && MpMediaseqlastlost){
+    //           MpMediaseqnotfoundcount=0;
+    //         }
+    //         // RTC_LOG(INFO)<<"sandymediaofo sending Media "<<MpMediaseqnext;
+    //         int Mplength = static_cast<int>(it->second.size());
+    //         //send the packet to video streaming controller
+    //         it->second.set_payload_type_frequency(kVideoPayloadTypeFrequency);
+    //         if(video_receiver_controller_.OnRtpPacket(it->second)){
+    //           received_bytes_per_second_counter_.Add(Mplength);
+    //           received_video_bytes_per_second_counter_.Add(Mplength);
+    //           event_log_->Log(
+    //               std::make_unique<RtcEventRtpPacketIncoming>(it->second));
+    //           const int64_t arrival_time_ms = it->second.arrival_time_ms();
+    //           if (!first_received_rtp_video_ms_) {
+    //             first_received_rtp_video_ms_.emplace(arrival_time_ms);
+    //           }
+    //           last_received_rtp_video_ms_.emplace(arrival_time_ms);
+    //         }
+    //         //Sent the packet to video streaming controller
+    //         MpMediahistory_.erase(it->first);
+    //         MpMediacount_-=1;
+    //       }else{
+    //         // RTC_LOG(INFO)<<"sandymediaofo sending Media cannot be found "<<MpMediaseqnext;
+    //         MpMediaseqnotfoundcount++;
+    //         MpMediaseq_=MpMediaseqnext;
+    //         MpMediaseqlastlost=MpMediaseqnext;//store the lost sequence number
+    //         if(MpMediacount_>MpMediaReorderingCount_){
+    //           MpMediacount_/=2;
+    //         }
+    //         if(MpMediaseqnotfoundcount>=MpMediaReorderingwaitCount){//Packet could be lost as we waited for 10 packets
+    //           // RTC_LOG(INFO)<<"sandymediaofo sorry could not find this packet and we assume it to be lossed "<< MpMediaseqnext<< 
+    //           // " count= "<<MpMediaseqnotfoundcount<<" limit "<<MpMediaReorderingwaitCount;
+    //           MpMediaseqnotfoundcount=0;
+    //           MpMediaseqnext++;
+    //           MpMediacount_=0;
+    //           break;
+    //         }
+    //         break;
+    //       }
+    //       MpMediaseqnext++;
+    //     }
+    //     if(i==MpMediaReorderingCount_)
+    //       MpMediacount_=0;
+    //     MpMediaseq_=MpMediaseqnext;
+    //   }
+    //   return DELIVERY_OK;      
+    // }
+
+
+
+
+
+
+
     parsed_packet.set_payload_type_frequency(kVideoPayloadTypeFrequency);
     if (video_receiver_controller_.OnRtpPacket(parsed_packet)) {
       received_bytes_per_second_counter_.Add(length);
@@ -1372,16 +1499,30 @@ PacketReceiver::DeliveryStatus Call::DeliverRtp(MediaType media_type,
   return DELIVERY_UNKNOWN_SSRC;
 }
 
-PacketReceiver::DeliveryStatus Call::DeliverPacket(
+PacketReceiver::DeliveryStatus Call::MpDeliverPacket(
     MediaType media_type,
     rtc::CopyOnWriteBuffer packet,
     int64_t packet_time_us,int pathid) {
+
+  // RTC_LOG(INFO)<<"sandystats doing DTLS received packet "<<pathid;
   RTC_DCHECK_RUN_ON(worker_thread_);
 
   if (IsRtcp(packet.cdata(), packet.size()))
     return DeliverRtcp(media_type, packet.cdata(), packet.size());
-  RTC_DCHECK(pathid>0);
+
   return DeliverRtp(media_type, std::move(packet), packet_time_us,pathid);
+}
+
+PacketReceiver::DeliveryStatus Call::DeliverPacket(
+    MediaType media_type,
+    rtc::CopyOnWriteBuffer packet,
+    int64_t packet_time_us) {
+  RTC_DCHECK_RUN_ON(worker_thread_);
+
+  if (IsRtcp(packet.cdata(), packet.size()))
+    return DeliverRtcp(media_type, packet.cdata(), packet.size());
+
+  return DeliverRtp(media_type, std::move(packet), packet_time_us,0);//sandy:Do not worry it will not be called
 }
 
 void Call::OnRecoveredPacket(const uint8_t* packet, size_t length) {
@@ -1413,9 +1554,6 @@ void Call::OnRecoveredPacket(const uint8_t* packet, size_t length) {
 
 void Call::NotifyBweOfReceivedPacket(const RtpPacketReceived& packet,
                                      MediaType media_type) {
-
-  RTC_DCHECK(packet.get_pathid()>0);
-
   auto it = receive_rtp_config_.find(packet.Ssrc());
   bool use_send_side_bwe =
       (it != receive_rtp_config_.end()) && it->second.use_send_side_bwe;
@@ -1427,13 +1565,7 @@ void Call::NotifyBweOfReceivedPacket(const RtpPacketReceived& packet,
   //sandy:Mp-WebRTC
   if(header.extension.hassandy){
     packet_msg.pathid=header.extension.sandy;
-    //sandy: We now know what is pathid from connection and RTP packet they should always match,if not it means it is "red" scheduler
-    // if(header.extension.sandy!=packet.get_pathid()){
-    //   RTC_LOG(INFO)<<"sandystats this must red scheduler and henc set same path it is received RTP path= "<< 
-    //   header.extension.sandy<<" connection pathid= "<<packet.get_pathid();
-    //   packet_msg.pathid=packet.get_pathid();
-    //   header.extension.sandy=packet.get_pathid();
-    // }
+    
   }else{
     RTC_DLOG(LS_ERROR)<<"sandyrtp received RTP packet path id not set";
     packet_msg.pathid=1;
@@ -1444,7 +1576,7 @@ void Call::NotifyBweOfReceivedPacket(const RtpPacketReceived& packet,
   if (header.extension.hasAbsoluteSendTime) {
     packet_msg.send_time = header.extension.GetAbsoluteSendTimestamp();
   }
-  transport_send_ptr_->OnReceivedPacket(packet_msg);//sandy: Transport controller
+  transport_send_ptr_->OnReceivedPacket(packet_msg);
 
   if (!use_send_side_bwe && header.extension.hasTransportSequenceNumber) {
     // Inconsistent configuration of send side BWE. Do nothing.
@@ -1459,9 +1591,73 @@ void Call::NotifyBweOfReceivedPacket(const RtpPacketReceived& packet,
   // For audio, we only support send side BWE.
   if (media_type == MediaType::VIDEO ||
       (use_send_side_bwe && header.extension.hasTransportSequenceNumber)) {
-    //sandy: If the scheduler is "red" same packet is received on both paths and hence pathid might not 1 or 2 in 
-    //RTP packet. Hence we will set the connection based path id
-          receive_side_cc_.OnReceivedPacket(
+    
+
+
+
+    // if(header.sequenceNumber>header.extension.mpflowseqnum && header.extension.hasmpflowseqnum && 
+    //   header.extension.mpflowseqnum>0 && header.extension.hasTransportSequenceNumber && header.extension.hasMpTransportSequenceNumber && 
+    //   header.extension.transportSequenceNumber!=header.extension.mptransportSequenceNumber && mpcollector_->MpISsecondPathOpen()){
+    //   uint16_t Mpseqnext=0;
+    //   if(!Mpseq_ || header.extension.transportSequenceNumber<Mpseq_){
+    //     Mpseq_=header.extension.transportSequenceNumber;
+    //     /*sandy:Retranmitted packets always have higher sequence numbers and
+    //     hence do not worry about differfentiating the retransmitted and out of order packets. Simply set the Mpseq_ with 
+    //     smallest value.*/
+    //   }
+    //   Mphistory_.insert(std::make_pair(header.extension.transportSequenceNumber,packet));
+    //   // RTC_LOG(INFO)<<"sandyofo let us insert the transport feedback "<<header.extension.transportSequenceNumber << 
+    //   // " MP: "<<header.extension.mptransportSequenceNumber;
+    //   Mpcount_++;
+    //   if(Mpcount_>MpReorderingCount_){
+    //     Mpseqnext=Mpseq_;
+    //     //RTC_LOG(INFO)<<"sandyofo let us send the transport feedback "<<Mpcount_<<" start= "<<Mpseq_<<" cur "<<Mpseqnext;
+    //     int i;
+    //     for(i=0;i<MpReorderingCount_;i++){
+    //       auto it=Mphistory_.find(Mpseqnext);
+    //       if(it!=Mphistory_.end()){
+    //         if(Mpseqlastlost && Mpseqlastlost==Mpseqnext){
+    //           Mpseqnotfoundcount=0;
+    //         }
+    //         //RTC_LOG(INFO)<<"sandyofo sending transport feedback "<<Mpseqnext;
+    //         RTPHeader Mpheader;
+    //         it->second.GetHeader(&Mpheader);
+    //         receive_side_cc_.OnReceivedPacket(
+    //           it->second.arrival_time_ms(), it->second.payload_size() + it->second.padding_size(),
+    //           Mpheader);
+    //         Mphistory_.erase(it->first);
+    //         Mpcount_-=1;
+    //       }else{
+    //         Mpseqnotfoundcount++;
+    //         Mpseqlastlost=Mpseqnext;
+    //         Mpseq_=Mpseqnext;
+    //         if(Mpcount_>MpReorderingCount_){
+    //           Mpcount_/=2;
+    //         }
+    //         if(Mpseqnotfoundcount>MpReorderingwaitCount_){
+    //           Mpseqnotfoundcount=0;
+    //           Mpseqnext++;
+    //           Mpcount_=0;
+    //           break;
+    //         }
+    //         break;
+    //       }
+    //       Mpseqnext++;
+    //     }
+    //     if(i==MpReorderingCount_)
+    //       Mpcount_=0;
+    //     Mpseq_=Mpseqnext;
+    //   }
+    // }else{//No Multipath so no need to worry about reordering
+    //   receive_side_cc_.OnReceivedPacket(
+    //         packet.arrival_time_ms(), packet.payload_size() + packet.padding_size(),
+    //         header);
+    // }
+
+
+
+
+    receive_side_cc_.OnReceivedPacket(
             packet.arrival_time_ms(), packet.payload_size() + packet.padding_size(),
             header);
   }

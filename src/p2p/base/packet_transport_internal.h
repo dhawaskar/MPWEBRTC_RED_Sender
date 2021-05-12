@@ -85,7 +85,7 @@ class RTC_EXPORT PacketTransportInternal : public sigslot::has_slots<> {
                    // TODO(bugs.webrtc.org/9584): Change to passing the int64_t
                    // timestamp by value.
                    const int64_t&,
-                   int,int>
+                   int>
       SignalReadPacket;
 
   // Signalled each time a packet is sent on this channel.

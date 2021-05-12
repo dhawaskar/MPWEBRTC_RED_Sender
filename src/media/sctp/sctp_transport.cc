@@ -1047,7 +1047,7 @@ void SctpTransport::OnPacketRead(rtc::PacketTransportInternal* transport,
                                  const char* data,
                                  size_t len,
                                  const int64_t& /* packet_time_us */,
-                                 int flags,int pathid) {
+                                 int flags) {
   RTC_DCHECK_RUN_ON(network_thread_);
   RTC_DCHECK_EQ(transport_, transport);
   TRACE_EVENT0("webrtc", "SctpTransport::OnPacketRead");

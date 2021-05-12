@@ -2233,7 +2233,7 @@ bool MediaSessionDescriptionFactory::AddVideoContentForOffer(
 
   video->set_direction(media_description_options.direction);
 
-  desc->AddContent(media_description_options.mid, MediaProtocolType::kRtp,//sandy
+  desc->AddContent(media_description_options.mid, MediaProtocolType::kRtp,
                    media_description_options.stopped, std::move(video));
   if (!AddTransportOffer(media_description_options.mid,
                          media_description_options.transport_options,

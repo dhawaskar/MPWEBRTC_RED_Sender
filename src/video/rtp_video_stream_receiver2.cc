@@ -143,7 +143,7 @@ void RtpVideoStreamReceiver2::RtcpFeedbackBuffer::SendNack(
     bool buffering_allowed,int pathid) {
   RTC_DCHECK_RUN_ON(&worker_task_checker_);
   RTC_DCHECK(!sequence_numbers.empty());
-  if(pathid==1){//sandy: Primary path NACK list
+  if(pathid!=2){//sandy: Primary path NACK list
     nack_sequence_numbers_p_.insert(nack_sequence_numbers_p_.end(),
                                 sequence_numbers.cbegin(),
                                 sequence_numbers.cend());
@@ -481,18 +481,6 @@ void RtpVideoStreamReceiver2::OnReceivedPayloadData(
     rtc::CopyOnWriteBuffer codec_payload,
     const RtpPacketReceived& rtp_packet,
     const RTPVideoHeader& video) {
-
-  RTPHeader header;
-  RTC_DCHECK(rtp_packet.get_pathid()>0);
-  // rtp_packet.GetHeader(&header);
-  // //sandy: When the "red" scheduler is used the path id might not be same
-  // if(header.extension.sandy!=rtp_packet.get_pathid()){
-  //   RTC_LOG(INFO)<<"sandystats this must red scheduler and henc set same path it is received RTP path= "<< 
-  //   header.extension.sandy<<" connection pathid= "<<rtp_packet.get_pathid();
-  //   header.extension.sandy=rtp_packet.get_pathid();
-  // }
-
-
   RTC_DCHECK_RUN_ON(&worker_task_checker_);
   auto packet = std::make_unique<video_coding::PacketBuffer::Packet>(
       rtp_packet, video, ntp_estimator_.Estimate(rtp_packet.Timestamp()),
@@ -577,9 +565,11 @@ void RtpVideoStreamReceiver2::OnReceivedPayloadData(
     }
   }
   
+  RTPHeader header;
+  rtp_packet.GetHeader(&header);
   int pathid=header.extension.sandy;
 
-  if (nack_module_ && pathid==1) {
+  if (nack_module_ && pathid!=2) {
     
 
     const bool is_keyframe =
@@ -673,6 +663,9 @@ void RtpVideoStreamReceiver2::OnRecoveredPacket(const uint8_t* rtp_packet,
 // This method handles both regular RTP packets and packets recovered
 // via FlexFEC.
 void RtpVideoStreamReceiver2::OnRtpPacket(const RtpPacketReceived& packet) {
+
+  // RTC_LOG(INFO)<<"sandystats doing DTLS received packet "<<packet.pathid;
+  RTC_DCHECK(packet.pathid>0);
   RTC_DCHECK_RUN_ON(&worker_task_checker_);
 
   if (!receiving_) {
@@ -995,22 +988,12 @@ void RtpVideoStreamReceiver2::ManageFrame(
 
 void RtpVideoStreamReceiver2::ReceivePacket(const RtpPacketReceived& packet) {
   RTC_DCHECK_RUN_ON(&worker_task_checker_);
-
-  RTPHeader header;
-  packet.GetHeader(&header);
-
   if (packet.payload_size() == 0) {
     // Padding or keep-alive packet.
     // TODO(nisse): Could drop empty packets earlier, but need to figure out how
     // they should be counted in stats.
-    
-    
-    //sandy: When the "red" scheduler is used the path id might not be same
-    if(header.extension.sandy!=packet.get_pathid()){
-      RTC_LOG(INFO)<<"sandystats this must red scheduler and henc set same path it is received RTP path= "<< 
-      header.extension.sandy<<" connection pathid= "<<packet.get_pathid();
-      header.extension.sandy=packet.get_pathid();
-    }
+    RTPHeader header;
+    packet.GetHeader(&header);
     int pathid=header.extension.sandy;
     RTC_DCHECK(pathid>0 && header.extension.mpflowseqnum>0);
     NotifyReceiverOfEmptyPacket(packet.SequenceNumber(), 
@@ -1033,9 +1016,6 @@ void RtpVideoStreamReceiver2::ReceivePacket(const RtpPacketReceived& packet) {
     return;
   }
 
-  RTC_DCHECK(packet.get_pathid()>0);
-  // RTC_LOG(INFO)<<"sandystats received RTP path= "<< 
-  //     header.extension.sandy<<" connection pathid= "<<packet.get_pathid();
   OnReceivedPayloadData(std::move(parsed_payload->video_payload), packet,
                         parsed_payload->video_header);
 }
@@ -1050,12 +1030,6 @@ void RtpVideoStreamReceiver2::ParseAndHandleEncapsulatingHeader(
       // packets.
       RTPHeader header;
     packet.GetHeader(&header);
-    //sandy: When the "red" scheduler is used the path id might not be same
-    if(header.extension.sandy!=packet.get_pathid()){
-      RTC_LOG(INFO)<<"sandystats this must red scheduler and henc set same path it is received RTP path= "<< 
-      header.extension.sandy<<" connection pathid= "<<packet.get_pathid();
-      header.extension.sandy=packet.get_pathid();
-    }
     int pathid=header.extension.sandy;
     RTC_DCHECK(pathid>0 && header.extension.mpflowseqnum>0);
       NotifyReceiverOfEmptyPacket(packet.SequenceNumber(), 
@@ -1079,7 +1053,7 @@ void RtpVideoStreamReceiver2::NotifyReceiverOfEmptyPacket(
   reference_finder_->PaddingReceived(seq_num);
 
   OnInsertedPacket(packet_buffer_.InsertPadding(seq_num));
-  if (nack_module_ && pathid==1)  {
+  if (nack_module_ && pathid!=2)  {
 
     nack_module_->OnReceivedPacket(seq_num, mp_seq_num,/* is_keyframe = */ false,
                                    /* is _recovered = */ false,pathid);

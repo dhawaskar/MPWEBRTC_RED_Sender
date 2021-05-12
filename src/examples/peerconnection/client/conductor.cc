@@ -284,7 +284,7 @@ void Conductor::OnPeerDisconnected(int id) {
   }
 }
 
-void Conductor::OnMessageFromPeer(int peer_id, const std::string& message) {//sandy: Sending message to peer
+void Conductor::OnMessageFromPeer(int peer_id, const std::string& message) {
   RTC_DCHECK(peer_id_ == peer_id || peer_id_ == -1);
   RTC_DCHECK(!message.empty());
 
@@ -424,7 +424,7 @@ void Conductor::ConnectToPeer(int peer_id) {
 
   if (InitializePeerConnection()) {
     peer_id_ = peer_id;
-    peer_connection_->CreateOffer(//sandy: Creating an offer.
+    peer_connection_->CreateOffer(
         this, webrtc::PeerConnectionInterface::RTCOfferAnswerOptions());
   } else {
     main_wnd_->MessageBox("Error", "Failed to initialize PeerConnection", true);

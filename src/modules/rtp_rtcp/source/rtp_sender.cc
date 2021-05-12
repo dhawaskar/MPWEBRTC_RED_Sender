@@ -659,54 +659,65 @@ void RTPSender::MPTrafficSplitImplementation(
   //rtc::CritScope lock(&send_critsect_);
   //sandy: Now split the traffic and assign subflow seq number to each of the flow.
   for (auto& packet : packets) {
-
-    if(total_packets_sent%2==0 || 
-    !mpcollector_->MpISsecondPathOpen()){//sandy: Set into primary path
+    
+    if((false && mpcollector_->MpGetScheduler().find("red")!=std::string::npos) && mpcollector_->MpISsecondPathOpen()){
+      /*
+      sandy: Redudant scheduler means each packet needs to be sent on both path
+      */
+      // RTC_LOG(INFO)<<"sandystats the scheduler is "<<mpcollector_->MpGetScheduler();
       packet->subflow_id=1;
-      packet->subflow_seq=sequence_number_p_++;
-      if(!mpcollector_->MpISsecondPathOpen() && packet->subflow_seq!=packet->SequenceNumber() && packet->SequenceNumber()>0 ){
-        sequence_number_p_=packet->SequenceNumber();
-        packet->subflow_seq=packet->SequenceNumber();
-      }
-      //mpcollector_->pathid=1;//sandy: Need this for splitting traffic in p2p_transport_channel.cc
-    }else if(mpcollector_->MpISsecondPathOpen()){
-      // RTC_LOG(INFO)<<"sandy setting the secondary path";
-      packet->subflow_id=2;
-      packet->subflow_seq=sequence_number_s_++;
-      //mpcollector_->pathid=2;//sandy: Need this for splitting traffic in p2p_transport_channel.cc
-    }
-    if (total_packets_sent < 4294967295)  total_packets_sent++;
-    else total_packets_sent=1;
-
-    //sandy: Now assign packet path
-    if (packet->HasExtension<sandy>()){
-      if(packet->subflow_id==1)
-        packet->SetExtension<sandy>(0x1);
-      else 
-        packet->SetExtension<sandy>(0x2);
-    }else{
-      RTC_LOG(INFO)<<"packet do not have pathid(sandy) extension header\n";
-    }
-
-    //sandy: Now assign the subflow sequence number
-    if (packet->HasExtension<MpFlowSeqNum>()){
+      packet->subflow_seq=packet->SequenceNumber();
+      packet->SetExtension<sandy>(0x1);
       packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
     }else{
-      RTC_LOG(INFO)<<"packet do not have subflow_seq extension header\n";
+      if(total_packets_sent%2==0 || 
+      !mpcollector_->MpISsecondPathOpen()){//sandy: Set into primary path
+        packet->subflow_id=1;
+        packet->subflow_seq=sequence_number_p_++;
+        if(!mpcollector_->MpISsecondPathOpen() && packet->subflow_seq!=packet->SequenceNumber() && packet->SequenceNumber()>0 ){
+          sequence_number_p_=packet->SequenceNumber();
+          packet->subflow_seq=packet->SequenceNumber();
+        }
+        //mpcollector_->pathid=1;//sandy: Need this for splitting traffic in p2p_transport_channel.cc
+      }else if(mpcollector_->MpISsecondPathOpen()){
+        // RTC_LOG(INFO)<<"sandy setting the secondary path";
+        packet->subflow_id=2;
+        packet->subflow_seq=sequence_number_s_++;
+        //mpcollector_->pathid=2;//sandy: Need this for splitting traffic in p2p_transport_channel.cc
+      }
+      if (total_packets_sent < 4294967295)  total_packets_sent++;
+      else total_packets_sent=1;
+
+      //sandy: Now assign packet path
+      if (packet->HasExtension<sandy>()){
+        if(packet->subflow_id==1)
+          packet->SetExtension<sandy>(0x1);
+        else 
+          packet->SetExtension<sandy>(0x2);
+      }else{
+        RTC_LOG(INFO)<<"packet do not have pathid(sandy) extension header\n";
+      }
+
+      //sandy: Now assign the subflow sequence number
+      if (packet->HasExtension<MpFlowSeqNum>()){
+        packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
+      }else{
+        RTC_LOG(INFO)<<"packet do not have subflow_seq extension header\n";
+      }
+      // RTC_LOG(INFO)<<"sandypath on packet created type: "<<*packet->packet_type()<<" payload_size "<<packet->payload_size() 
+      // <<" padding size "<<packet->padding_size();
+      //sandy: For your reference
+      //     enum class RtpPacketMediaType : size_t {
+      //   kAudio,                         // Audio media packets.
+      //   kVideo,                         // Video media packets.
+      //   kRetransmission,                // Retransmisions, sent as response to NACK.
+      //   kForwardErrorCorrection,        // FEC packets.
+      //   kPadding = kNumMediaTypes - 1,  // RTX or plain padding sent to maintain BWE.
+      //   // Again, don't forget to udate |kNumMediaTypes| if you add another value!
+      // };
+      //RTC_LOG(INFO)<<"sandy sending packet with sequence "<<packet->SequenceNumber()<< 
+      //" path id= "<< packet->subflow_id <<" Type "<<*packet->packet_type()<< " mp seq= "<<packet->flowseq<<"\n";
     }
-    // RTC_LOG(INFO)<<"sandypath on packet created type: "<<*packet->packet_type()<<" payload_size "<<packet->payload_size() 
-    // <<" padding size "<<packet->padding_size();
-    //sandy: For your reference
-    //     enum class RtpPacketMediaType : size_t {
-    //   kAudio,                         // Audio media packets.
-    //   kVideo,                         // Video media packets.
-    //   kRetransmission,                // Retransmisions, sent as response to NACK.
-    //   kForwardErrorCorrection,        // FEC packets.
-    //   kPadding = kNumMediaTypes - 1,  // RTX or plain padding sent to maintain BWE.
-    //   // Again, don't forget to udate |kNumMediaTypes| if you add another value!
-    // };
-    //RTC_LOG(INFO)<<"sandy sending packet with sequence "<<packet->SequenceNumber()<< 
-    //" path id= "<< packet->subflow_id <<" Type "<<*packet->packet_type()<< " mp seq= "<<packet->flowseq<<"\n";
   }
   paced_sender_->EnqueuePackets(std::move(packets));//Traffic is only in one single path
 }

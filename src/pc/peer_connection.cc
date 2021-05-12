@@ -1255,7 +1255,7 @@ bool PeerConnection::Initialize(
           // the packet.
           if (call_) {
             call_->Receiver()->DeliverPacket(MediaType::ANY, packet,
-                                             packet_time_us,1);//sandy: Assuming the initialisation so pathid=1
+                                             packet_time_us);
           }
         });
   };

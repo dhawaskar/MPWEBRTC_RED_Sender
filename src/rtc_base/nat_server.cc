@@ -159,7 +159,7 @@ void NATServer::OnInternalUDPPacket(AsyncPacketSocket* socket,
                                     const char* buf,
                                     size_t size,
                                     const SocketAddress& addr,
-                                    const int64_t& /* packet_time_us */,int pathid) {
+                                    const int64_t& /* packet_time_us */) {
   // Read the intended destination from the wire.
   SocketAddress dest_addr;
   size_t length = UnpackAddressFromNAT(buf, size, &dest_addr);
@@ -185,7 +185,7 @@ void NATServer::OnExternalUDPPacket(AsyncPacketSocket* socket,
                                     const char* buf,
                                     size_t size,
                                     const SocketAddress& remote_addr,
-                                    const int64_t& /* packet_time_us */,int pathid) {
+                                    const int64_t& /* packet_time_us */) {
   SocketAddress local_addr = socket->GetLocalAddress();
 
   // Find the translation for this addresses.

@@ -1547,11 +1547,7 @@ int P2PTransportChannel::SendPacket(const char* data,
             
         RTC_LOG(LS_INFO)<<"pathsandy: ***** This connection is writable  *****\t from:"<< 
         connection->stats().local_candidate.address().ToString()<<"\t to"<<  
-        connection->stats().remote_candidate.address().ToString()<<" name "<<connection->stats().local_candidate.network_name()<<"\n";
-
-        RTC_LOG(LS_INFO)<<"pathsandy: ***** primary connection  *****\t from:"<< 
-        selected_connection_->stats().local_candidate.address().ToString()<<"\t to"<<  
-        selected_connection_->stats().remote_candidate.address().ToString()<<" name "<<selected_connection_->stats().local_candidate.network_name()<<"\n";
+        connection->stats().remote_candidate.address().ToString()<<connection->stats().local_candidate.network_name()<<"\n";
       
         second_connection_= connection;
         mpcollector_->MpSetSecondPath(1);          
@@ -1559,11 +1555,7 @@ int P2PTransportChannel::SendPacket(const char* data,
       else{
         RTC_LOG(LS_INFO)<<"pathsandy: ***** This connection is not writable  *****\t from:"<<  
         connection->stats().local_candidate.address().ToString()<<"\t to"<<   
-        connection->stats().remote_candidate.address().ToString()<<" name "<<connection->stats().local_candidate.network_name()<<"\n";
-
-        RTC_LOG(LS_INFO)<<"pathsandy: ***** primary connection  *****\t from:"<< 
-        selected_connection_->stats().local_candidate.address().ToString()<<"\t to"<<  
-        selected_connection_->stats().remote_candidate.address().ToString()<<" name "<<selected_connection_->stats().local_candidate.network_name()<<"\n";
+        connection->stats().remote_candidate.address().ToString()<<connection->stats().local_candidate.network_name()<<"\n";
       }
     }
     sandy_connection_wait--;
@@ -2175,13 +2167,13 @@ void P2PTransportChannel::OnReadPacket(Connection* connection,
 
   if (connection == selected_connection_) {
     // Let the client know of an incoming packet
-    //SignalReadPacket(this, data, len, packet_time_us, 0);
-    SignalReadPacket(this, data, len, packet_time_us, 0,1);
-    //sandy: This is primary packet and hence send 1 as argument, we will use the flag field to do this
+    // SignalReadPacket(this, data, len, packet_time_us, 0);
+    SignalReadPacket(this, data, len, packet_time_us, 1);//sandy
     return;
-  }else if(connection==second_connection_){
-    // RTC_LOG(INFO)<<"sandystats received packets on second path";
-    SignalReadPacket(this, data, len, packet_time_us, 0,2);
+  }else if(connection == second_connection_){
+    // Let the client know of an incoming packet in secondary path
+    // SignalReadPacket(this, data, len, packet_time_us, 0);
+    SignalReadPacket(this, data, len, packet_time_us, 2);//sandy
     return;
   }
 
@@ -2191,7 +2183,7 @@ void P2PTransportChannel::OnReadPacket(Connection* connection,
 
   // Let the client know of an incoming packet
   // SignalReadPacket(this, data, len, packet_time_us, 0);
-  SignalReadPacket(this, data, len, packet_time_us, 0,1);//sandy: This is secondary connection and hence send 2 as argument
+  SignalReadPacket(this, data, len, packet_time_us, 1);//sandy
 
   // May need to switch the sending connection based on the receiving media path
   // if this is the controlled side.

@@ -88,14 +88,14 @@ public:
 	bool MpISsecondPathOpen(){ //Check if Second path in Mp-WebRTC is active?
 		return MPSecond_path;
 	}
-	std::string MpGetScheduler(){
-		return scheduler_;
+	void MpSetSecondPath(int stat){
+		MPSecond_path=stat;
 	}
 	void MpSetScheduler(std::string scheduler){
 		scheduler_=scheduler;
 	}
-	void MpSetSecondPath(int stat){
-		MPSecond_path=stat;
+	std::string MpGetScheduler(){
+		return scheduler_;
 	}
 
 };

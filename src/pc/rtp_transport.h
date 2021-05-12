@@ -103,7 +103,7 @@ class RtpTransport : public RtpTransportInternal {
                     const char* data,
                     size_t len,
                     const int64_t& packet_time_us,
-                    int flags,int pathid);
+                    int flags);
 
   // Updates "ready to send" for an individual channel and fires
   // SignalReadyToSend.

@@ -432,7 +432,7 @@ void RtpTransportControllerSend::OnSentPacket(
     RTC_DCHECK_RUN_ON(&task_queue_);
     int pathid=sent_packet.pathid;
     if(sent_packet.packet_id != -1){
-      // RTC_LOG(INFO)<<"sandystats the packet is sent on the path id ="<<pathid;
+      // RTC_LOG(INFO)<<"sandystats the packet is sent on path id ="<<pathid;
       RTC_DCHECK(pathid>0);
     }
     if(pathid!=2){
@@ -917,13 +917,12 @@ void RtpTransportControllerSend::OnReceivedRtcpReceiverReportBlocks(
                                  it->second.extended_highest_sequence_number;
         total_packets_delta += number_of_packets;
         auto lost_delta = report_block.packets_lost - it->second.packets_lost;
-        RTC_LOG(INFO)<<"sandystats loss report "<<lost_delta<<" pathid= "<<pathid<<" cur "<<report_block.packets_lost<< 
-        " prev "<<it->second.packets_lost;
-        if(lost_delta<0 ){
+        RTC_LOG(INFO)<<"sandystats loss report "<<lost_delta<<" pathid= "<<pathid<< "prev"<< 
+        it->second.packets_lost<<" current "<<report_block.packets_lost;
+        if(lost_delta<0){
           lost_delta*=-1;
-          if(lost_delta>65535){
+          if(lost_delta>65535)
             lost_delta=0;
-          }
         }
         total_packets_lost_delta += lost_delta;
       }
@@ -937,13 +936,11 @@ void RtpTransportControllerSend::OnReceivedRtcpReceiverReportBlocks(
                                  it->second.extended_highest_sequence_number;
         total_packets_delta += number_of_packets;
         auto lost_delta = report_block.packets_lost - it->second.packets_lost;
-        RTC_LOG(INFO)<<"sandystats loss report "<<lost_delta<<" pathid= "<<pathid<<" cur "<<report_block.packets_lost<< 
-        " prev "<<it->second.packets_lost;
-        if(lost_delta<0 ){
+        // RTC_LOG(INFO)<<"sandystats loss report "<<lost_delta<<" pathid= "<<pathid;
+        if(lost_delta<0){
           lost_delta*=-1;
-          if(lost_delta>65535){
+          if(lost_delta>65535)
             lost_delta=0;
-          }
         }        
         total_packets_lost_delta += lost_delta;
       }

@@ -202,7 +202,7 @@ class DtlsTransport : public DtlsTransportInternal {
                     const char* data,
                     size_t size,
                     const int64_t& packet_time_us,
-                    int flags,int pathid);
+                    int flags);
   void OnSentPacket(rtc::PacketTransportInternal* transport,
                     const rtc::SentPacket& sent_packet);
   void OnReadyToSend(rtc::PacketTransportInternal* transport);

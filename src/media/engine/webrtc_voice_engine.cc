@@ -2073,11 +2073,13 @@ bool WebRtcVoiceMediaChannel::InsertDtmf(uint32_t ssrc,
 
 void WebRtcVoiceMediaChannel::OnPacketReceived(rtc::CopyOnWriteBuffer packet,
                                                int64_t packet_time_us,int pathid) {
+
+  // RTC_DCHECK(packet.GetPathid()>0);
   RTC_DCHECK(worker_thread_checker_.IsCurrent());
 
   webrtc::PacketReceiver::DeliveryStatus delivery_result =
       call_->Receiver()->DeliverPacket(webrtc::MediaType::AUDIO, packet,
-                                       packet_time_us,pathid);
+                                       packet_time_us);
 
   if (delivery_result != webrtc::PacketReceiver::DELIVERY_UNKNOWN_SSRC) {
     return;
@@ -2130,7 +2132,7 @@ void WebRtcVoiceMediaChannel::OnPacketReceived(rtc::CopyOnWriteBuffer packet,
   }
 
   delivery_result = call_->Receiver()->DeliverPacket(webrtc::MediaType::AUDIO,
-                                                     packet, packet_time_us,pathid);
+                                                     packet, packet_time_us);
   RTC_DCHECK_NE(webrtc::PacketReceiver::DELIVERY_UNKNOWN_SSRC, delivery_result);
 }
 

@@ -107,7 +107,7 @@ class TurnServerAllocation : public rtc::MessageHandler,
                         const char* data,
                         size_t size,
                         const rtc::SocketAddress& addr,
-                        const int64_t& packet_time_us,int pathid);
+                        const int64_t& packet_time_us);
 
   static int ComputeLifetime(const TurnMessage* msg);
   bool HasPermission(const rtc::IPAddress& addr);
@@ -260,7 +260,7 @@ class TurnServer : public sigslot::has_slots<> {
                         const char* data,
                         size_t size,
                         const rtc::SocketAddress& address,
-                        const int64_t& packet_time_us,int pathid);
+                        const int64_t& packet_time_us);
 
   void OnNewInternalConnection(rtc::AsyncSocket* socket);
 

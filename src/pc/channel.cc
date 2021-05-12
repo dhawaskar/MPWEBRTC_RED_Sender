@@ -450,12 +450,12 @@ bool BaseChannel::SendPacket(bool rtcp,
 }
 
 void BaseChannel::OnRtpPacket(const webrtc::RtpPacketReceived& parsed_packet) {
+
+  int pathid=parsed_packet.pathid;
+  // RTC_LOG(INFO)<<"sandystats doing DTLS received packet "<<pathid;
   // Take packet time from the |parsed_packet|.
   // RtpPacketReceived.arrival_time_ms = (timestamp_us + 500) / 1000;
   int64_t packet_time_us = -1;
-  int pathid=parsed_packet.get_pathid();
-  RTC_DCHECK(pathid>0);//sandy: path id based on the connection
-
   if (parsed_packet.arrival_time_ms() > 0) {
     packet_time_us = parsed_packet.arrival_time_ms() * 1000;
   }
@@ -484,6 +484,7 @@ void BaseChannel::OnRtpPacket(const webrtc::RtpPacketReceived& parsed_packet) {
   }
 
   auto packet_buffer = parsed_packet.Buffer();
+  
 
   invoker_.AsyncInvoke<void>(
       RTC_FROM_HERE, worker_thread_, [this, packet_buffer, packet_time_us,pathid] {

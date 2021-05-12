@@ -51,7 +51,7 @@ class TestEchoServer : public sigslot::has_slots<> {
                 const char* buf,
                 size_t size,
                 const SocketAddress& remote_addr,
-                const int64_t& /* packet_time_us */,int pathid) {
+                const int64_t& /* packet_time_us */) {
     rtc::PacketOptions options;
     socket->Send(buf, size, options);
   }

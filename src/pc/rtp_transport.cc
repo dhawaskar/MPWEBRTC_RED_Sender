@@ -182,8 +182,12 @@ bool RtpTransport::UnregisterRtpDemuxerSink(RtpPacketSinkInterface* sink) {
 
 void RtpTransport::DemuxPacket(rtc::CopyOnWriteBuffer packet,
                                int64_t packet_time_us,int pathid) {
+
+  // RTC_LOG(INFO)<<"sandystats doing DTLS received packet "<<packet.GetPathid();
+
   webrtc::RtpPacketReceived parsed_packet(&header_extension_map_);
-  //sandy:Parseing the packet.
+  //sandy: Set the pathid of the packet here
+  parsed_packet.pathid=pathid;
   if (!parsed_packet.Parse(std::move(packet))) {
     RTC_LOG(LS_ERROR)
         << "Failed to parse the incoming RTP packet before demuxing. Drop it.";
@@ -193,9 +197,6 @@ void RtpTransport::DemuxPacket(rtc::CopyOnWriteBuffer packet,
   if (packet_time_us != -1) {
     parsed_packet.set_arrival_time_ms((packet_time_us + 500) / 1000);
   }
-  //sandy: Since we do not want to carry pathid in the RTP packet use the received RTP packet pathid based on connection
-  RTC_DCHECK(pathid>0);//sandy: This path id based on the connection not on the RTP extension header.
-  parsed_packet.set_pathid(pathid);
   if (!rtp_demuxer_.OnRtpPacket(parsed_packet)) {
     RTC_LOG(LS_WARNING) << "Failed to demux RTP packet: "
                         << RtpDemuxer::DescribePacket(parsed_packet);
@@ -246,9 +247,9 @@ void RtpTransport::OnReadPacket(rtc::PacketTransportInternal* transport,
                                 const char* data,
                                 size_t len,
                                 const int64_t& packet_time_us,
-                                int flags,int pathid) {
+                                int flags) {
   TRACE_EVENT0("webrtc", "RtpTransport::OnReadPacket");
-  
+  // RTC_DCHECK(flags>1);
 
   // When using RTCP multiplexing we might get RTCP packets on the RTP
   // transport. We check the RTP payload type to determine if it is RTCP.
@@ -261,17 +262,21 @@ void RtpTransport::OnReadPacket(rtc::PacketTransportInternal* transport,
 
   // Protect ourselves against crazy data.
   if (!cricket::IsValidRtpPacketSize(packet_type, len)) {
+    RTC_DCHECK(1==0);//sandy I have added this to make sure that we do not drop any RTP packet
     RTC_LOG(LS_ERROR) << "Dropping incoming "
                       << cricket::RtpPacketTypeToString(packet_type)
                       << " packet: wrong size=" << len;
     return;
   }
+  
+  rtc::CopyOnWriteBuffer packet(data, len,flags);
+  
 
-  rtc::CopyOnWriteBuffer packet(data, len);
   if (packet_type == cricket::RtpPacketType::kRtcp) {
     OnRtcpPacketReceived(std::move(packet), packet_time_us);
   } else {
-    OnRtpPacketReceived(std::move(packet), packet_time_us,pathid);
+    // RTC_LOG(INFO)<<"sandystats doing DTLS received packet after pathset "<<flags;
+    OnRtpPacketReceived(packet, packet_time_us,flags);
   }
 }
 

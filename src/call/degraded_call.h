@@ -91,11 +91,14 @@ class DegradedCall : public Call, private PacketReceiver {
   void OnSentPacket(const rtc::SentPacket& sent_packet) override;
 
  protected:
+  // Implements Mp-WebRTC PacketReceiver.
+  DeliveryStatus MpDeliverPacket(MediaType media_type,
+                               rtc::CopyOnWriteBuffer packet,
+                               int64_t packet_time_us,int pathid) override;
   // Implements PacketReceiver.
   DeliveryStatus DeliverPacket(MediaType media_type,
                                rtc::CopyOnWriteBuffer packet,
-                               int64_t packet_time_us,int pathid) override;
-
+                               int64_t packet_time_us) override;
  private:
   class FakeNetworkPipeOnTaskQueue {
    public:

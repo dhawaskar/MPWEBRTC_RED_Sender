@@ -1642,10 +1642,11 @@ void WebRtcVideoChannel::FillSendAndReceiveCodecStats(
 
 void WebRtcVideoChannel::OnPacketReceived(rtc::CopyOnWriteBuffer packet,
                                           int64_t packet_time_us,int pathid) {
-  RTC_DCHECK(pathid>0);
+
+  // RTC_LOG(INFO)<<"sandystats doing DTLS received packet "<<pathid;
   RTC_DCHECK_RUN_ON(&thread_checker_);
   const webrtc::PacketReceiver::DeliveryStatus delivery_result =
-      call_->Receiver()->DeliverPacket(webrtc::MediaType::VIDEO, packet,
+      call_->Receiver()->MpDeliverPacket(webrtc::MediaType::VIDEO, packet,
                                        packet_time_us,pathid);
   switch (delivery_result) {
     case webrtc::PacketReceiver::DELIVERY_OK:
@@ -1698,7 +1699,7 @@ void WebRtcVideoChannel::OnPacketReceived(rtc::CopyOnWriteBuffer packet,
       break;
   }
 
-  if (call_->Receiver()->DeliverPacket(webrtc::MediaType::VIDEO, packet,
+  if (call_->Receiver()->MpDeliverPacket(webrtc::MediaType::VIDEO, packet,
                                        packet_time_us,pathid) !=
       webrtc::PacketReceiver::DELIVERY_OK) {
     RTC_LOG(LS_WARNING) << "Failed to deliver RTP packet on re-delivery.";
@@ -1721,7 +1722,7 @@ void WebRtcVideoChannel::BackfillBufferedPackets(
       ssrcs, [&](uint32_t ssrc, int64_t packet_time_us,
                  rtc::CopyOnWriteBuffer packet) {
         switch (receiver->DeliverPacket(webrtc::MediaType::VIDEO, packet,
-                                        packet_time_us,1)) {//sandy: I do not know this so I have put 1
+                                        packet_time_us)) {//sandy: I do not know this so I set as one
           case webrtc::PacketReceiver::DELIVERY_OK:
             delivery_ok_cnt++;
             break;

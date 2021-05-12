@@ -202,6 +202,8 @@ bool SrtpTransport::SendRtcpPacket(rtc::CopyOnWriteBuffer* packet,
 
 void SrtpTransport::OnRtpPacketReceived(rtc::CopyOnWriteBuffer packet,
                                         int64_t packet_time_us,int pathid) {
+  // RTC_DCHECK(pathid>1);
+  // RTC_LOG(INFO)<<"sandystats doing DTLS received packet "<<pathid;
   if (!IsSrtpActive()) {
     RTC_LOG(LS_WARNING)
         << "Inactive SRTP transport received an RTP packet. Drop it.";

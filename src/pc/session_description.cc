@@ -136,7 +136,7 @@ const ContentInfo* SessionDescription::FirstContent() const {
   return (contents_.empty()) ? NULL : &(*contents_.begin());
 }
 
-void SessionDescription::AddContent(//sandy
+void SessionDescription::AddContent(
     const std::string& name,
     MediaProtocolType type,
     std::unique_ptr<MediaContentDescription> description) {
