@@ -660,7 +660,7 @@ void RTPSender::MPTrafficSplitImplementation(
   //sandy: Now split the traffic and assign subflow seq number to each of the flow.
   for (auto& packet : packets) {
     
-    if((false && mpcollector_->MpGetScheduler().find("red")!=std::string::npos) && mpcollector_->MpISsecondPathOpen()){
+    if(( mpcollector_->MpGetScheduler().find("red")!=std::string::npos) && mpcollector_->MpISsecondPathOpen()){
       /*
       sandy: Redudant scheduler means each packet needs to be sent on both path
       */

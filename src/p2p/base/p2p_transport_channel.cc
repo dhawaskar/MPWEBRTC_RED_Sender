@@ -1569,6 +1569,12 @@ int P2PTransportChannel::SendPacket(const char* data,
     error_ = ENOTCONN;
     return -1;
   }
+  if (second_connection_){
+    if(!ReadyToSend(second_connection_) ) {
+      error_ = ENOTCONN;
+      return -1;
+    }
+  }
   
 
   last_sent_packet_id_ = options.packet_id;
@@ -1580,8 +1586,24 @@ int P2PTransportChannel::SendPacket(const char* data,
   int sent = -1;
 
   // selected_connection_->Send(data, len, modified_options);
+  if(( mpcollector_->MpGetScheduler().find("red")!=std::string::npos) && mpcollector_->MpISsecondPathOpen()){
+    
+    modified_options.pathid=2;
+    sent=second_connection_->Send(data, len, modified_options);
+    if (sent <= 0) {
+      RTC_DCHECK(sent < 0);
+      error_ = second_connection_->GetError();
+    }
 
-  if(options.pathid!=2 || !second_connection_){
+
+    modified_options.pathid=1;//sandy: Copy the pathid
+    sent = selected_connection_->Send(data, len, modified_options);
+    if (sent <= 0) {
+      RTC_DCHECK(sent < 0);
+       error_ = selected_connection_->GetError();
+    }
+  }
+  else if(options.pathid!=2 || !second_connection_){
     modified_options.pathid=1;//sandy: Copy the pathid
     sent = selected_connection_->Send(data, len, modified_options);
     if (sent <= 0) {
@@ -2168,11 +2190,13 @@ void P2PTransportChannel::OnReadPacket(Connection* connection,
   if (connection == selected_connection_) {
     // Let the client know of an incoming packet
     // SignalReadPacket(this, data, len, packet_time_us, 0);
+    RTC_LOG(INFO)<<"sandystats received packet on P1";
     SignalReadPacket(this, data, len, packet_time_us, 1);//sandy
     return;
   }else if(connection == second_connection_){
     // Let the client know of an incoming packet in secondary path
     // SignalReadPacket(this, data, len, packet_time_us, 0);
+    RTC_LOG(INFO)<<"sandystats received packet on P2";
     SignalReadPacket(this, data, len, packet_time_us, 2);//sandy
     return;
   }

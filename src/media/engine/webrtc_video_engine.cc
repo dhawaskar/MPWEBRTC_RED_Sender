@@ -1643,11 +1643,12 @@ void WebRtcVideoChannel::FillSendAndReceiveCodecStats(
 void WebRtcVideoChannel::OnPacketReceived(rtc::CopyOnWriteBuffer packet,
                                           int64_t packet_time_us,int pathid) {
 
-  // RTC_LOG(INFO)<<"sandystats doing DTLS received packet "<<pathid;
+  RTC_LOG(INFO)<<"sandystats received packet on "<<pathid;
+  packet.SetPathid(pathid);
   RTC_DCHECK_RUN_ON(&thread_checker_);
   const webrtc::PacketReceiver::DeliveryStatus delivery_result =
       call_->Receiver()->MpDeliverPacket(webrtc::MediaType::VIDEO, packet,
-                                       packet_time_us,pathid);
+                                       packet_time_us,packet.GetPathid());
   switch (delivery_result) {
     case webrtc::PacketReceiver::DELIVERY_OK:
       return;
@@ -1700,7 +1701,7 @@ void WebRtcVideoChannel::OnPacketReceived(rtc::CopyOnWriteBuffer packet,
   }
 
   if (call_->Receiver()->MpDeliverPacket(webrtc::MediaType::VIDEO, packet,
-                                       packet_time_us,pathid) !=
+                                       packet_time_us,packet.GetPathid()) !=
       webrtc::PacketReceiver::DELIVERY_OK) {
     RTC_LOG(LS_WARNING) << "Failed to deliver RTP packet on re-delivery.";
     return;

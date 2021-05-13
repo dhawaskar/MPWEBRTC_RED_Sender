@@ -203,9 +203,11 @@ bool SrtpTransport::SendRtcpPacket(rtc::CopyOnWriteBuffer* packet,
 void SrtpTransport::OnRtpPacketReceived(rtc::CopyOnWriteBuffer packet,
                                         int64_t packet_time_us,int pathid) {
   // RTC_DCHECK(pathid>1);
-  // RTC_LOG(INFO)<<"sandystats doing DTLS received packet "<<pathid;
+  
+  packet.SetPathid(pathid);
+
   if (!IsSrtpActive()) {
-    RTC_LOG(LS_WARNING)
+    RTC_LOG(LS_ERROR)
         << "Inactive SRTP transport received an RTP packet. Drop it.";
     return;
   }
@@ -225,13 +227,15 @@ void SrtpTransport::OnRtpPacketReceived(rtc::CopyOnWriteBuffer packet,
       RTC_LOG(LS_ERROR) << "Failed to unprotect RTP packet: size=" << len
                         << ", seqnum=" << seq_num << ", SSRC=" << ssrc
                         << ", previous failure count: "
-                        << decryption_failure_count_;
+                        << decryption_failure_count_ 
+                        <<" pathid "<< packet.GetPathid();
     }
     ++decryption_failure_count_;
     return;
   }
   packet.SetSize(len);
-  DemuxPacket(std::move(packet), packet_time_us,pathid);
+  RTC_LOG(INFO)<<"sandystats received packet on srtp "<<packet.GetPathid();
+  DemuxPacket(std::move(packet), packet_time_us,packet.GetPathid());
 }
 
 void SrtpTransport::OnRtcpPacketReceived(rtc::CopyOnWriteBuffer packet,

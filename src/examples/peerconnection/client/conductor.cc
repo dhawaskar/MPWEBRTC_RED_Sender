@@ -71,9 +71,13 @@ class DummySetSessionDescriptionObserver
 class CapturerTrackSource : public webrtc::VideoTrackSource {
  public:
   static rtc::scoped_refptr<CapturerTrackSource> Create() {
-    const size_t kWidth = 1920;//640
-    const size_t kHeight = 1080;//480,729
-    const size_t kFps = 50;
+    // const size_t kWidth = 4096;//1920
+    // const size_t kHeight = 2160;//1080
+    // const size_t kWidth = 1920;//1920
+    // const size_t kHeight = 1080;//1080
+    const size_t kWidth = 2048;//1920
+    const size_t kHeight = 1080;//1080
+    const size_t kFps = 60;
     std::unique_ptr<webrtc::test::VcmCapturer> capturer;
     std::unique_ptr<webrtc::VideoCaptureModule::DeviceInfo> info(
         webrtc::VideoCaptureFactory::CreateDeviceInfo());

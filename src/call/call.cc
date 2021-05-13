@@ -1292,8 +1292,8 @@ PacketReceiver::DeliveryStatus Call::DeliverRtp(MediaType media_type,
                                                 rtc::CopyOnWriteBuffer packet,
                                                 int64_t packet_time_us,int pathid) {
 
-  // RTC_LOG(INFO)<<"sandystats doing DTLS received packet "<<pathid;
-  RTC_DCHECK(pathid>0);
+  RTC_LOG(INFO)<<"sandystats received packet on "<<pathid;
+
   TRACE_EVENT0("webrtc", "Call::DeliverRtp");
   
 
@@ -1344,10 +1344,13 @@ PacketReceiver::DeliveryStatus Call::DeliverRtp(MediaType media_type,
   */
   RTPHeader header;
   parsed_packet.GetHeader(&header);
-  if(header.extension.sandy!=pathid){
-    RTC_LOG(INFO)<<"sandy: This must Redundant scheduler\n";
-    header.extension.sandy=pathid;
-    parsed_packet.subflow_id=pathid;
+  if(header.extension.sandy!=parsed_packet.pathid){
+    RTC_LOG(INFO)<<"sandy: This must Redundant scheduler RTP path= "<<header.extension.sandy<< 
+    ":"<<parsed_packet.subflow_id<<"connection path= "<<parsed_packet.pathid;
+    header.extension.sandy=parsed_packet.pathid;
+    parsed_packet.subflow_id=parsed_packet.pathid;
+    RTC_LOG(INFO)<<"sandy: This must Redundant scheduler RTP path= "<<header.extension.sandy<< 
+    ":"<<parsed_packet.subflow_id<<"connection path= "<<parsed_packet.pathid;
   }
 
   NotifyBweOfReceivedPacket(parsed_packet, media_type);

@@ -451,8 +451,8 @@ bool BaseChannel::SendPacket(bool rtcp,
 
 void BaseChannel::OnRtpPacket(const webrtc::RtpPacketReceived& parsed_packet) {
 
-  int pathid=parsed_packet.pathid;
-  // RTC_LOG(INFO)<<"sandystats doing DTLS received packet "<<pathid;
+  
+  RTC_LOG(INFO)<<"sandystats received packet on "<<parsed_packet.pathid;
   // Take packet time from the |parsed_packet|.
   // RtpPacketReceived.arrival_time_ms = (timestamp_us + 500) / 1000;
   int64_t packet_time_us = -1;
@@ -487,9 +487,9 @@ void BaseChannel::OnRtpPacket(const webrtc::RtpPacketReceived& parsed_packet) {
   
 
   invoker_.AsyncInvoke<void>(
-      RTC_FROM_HERE, worker_thread_, [this, packet_buffer, packet_time_us,pathid] {
+      RTC_FROM_HERE, worker_thread_, [this, packet_buffer, packet_time_us,parsed_packet] {
         RTC_DCHECK(worker_thread_->IsCurrent());
-        media_channel_->OnPacketReceived(packet_buffer, packet_time_us,pathid);
+        media_channel_->OnPacketReceived(packet_buffer, packet_time_us,parsed_packet.pathid);
       });
 }
 

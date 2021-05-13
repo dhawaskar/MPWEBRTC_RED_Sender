@@ -132,7 +132,7 @@ bool SrtpSession::ProtectRtcp(void* p, int in_len, int max_len, int* out_len) {
 bool SrtpSession::UnprotectRtp(void* p, int in_len, int* out_len) {
   RTC_DCHECK(thread_checker_.IsCurrent());
   if (!session_) {
-    RTC_LOG(LS_WARNING) << "Failed to unprotect SRTP packet: no SRTP Session";
+    RTC_LOG(LS_ERROR) << "Failed to unprotect SRTP packet: no SRTP Session";
     return false;
   }
 

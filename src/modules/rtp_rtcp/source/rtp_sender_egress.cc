@@ -242,7 +242,14 @@ void RtpSenderEgress::SendPacket(RtpPacketToSend* packet,
   // Put packet in retransmission history or update pending status even if
   // actual sending fails.
   if (is_media && packet->allow_retransmission()) {
-    if(packet->subflow_id!=2){//sandy: Primary path add the packets
+    //sandy: For redundant scheduler make sure to save it in both P1 and P2
+    if(( mpcollector_->MpGetScheduler().find("red")!=std::string::npos) && mpcollector_->MpISsecondPathOpen()){
+      packet_history_p_->PutRtpPacket(std::make_unique<RtpPacketToSend>(*packet),
+                                  now_ms);
+      packet_history_s_->PutRtpPacket(std::make_unique<RtpPacketToSend>(*packet),
+                                  now_ms);
+    }
+    else if(packet->subflow_id!=2){//sandy: Primary path add the packets
       packet_history_p_->PutRtpPacket(std::make_unique<RtpPacketToSend>(*packet),
                                   now_ms);
     }else{//sandy: secondary path add the packets
@@ -250,7 +257,11 @@ void RtpSenderEgress::SendPacket(RtpPacketToSend* packet,
                                   now_ms);
     }
   } else if (packet->retransmitted_sequence_number()) {
-    if(packet->subflow_id!=2)
+    if(( mpcollector_->MpGetScheduler().find("red")!=std::string::npos) && mpcollector_->MpISsecondPathOpen()){
+      packet_history_p_->MarkPacketAsSent(*packet->retransmitted_sequence_number());
+      packet_history_s_->MarkPacketAsSent(*packet->retransmitted_sequence_number());
+    }
+    else if(packet->subflow_id!=2)
       packet_history_p_->MarkPacketAsSent(*packet->retransmitted_sequence_number());
     else
       packet_history_s_->MarkPacketAsSent(*packet->retransmitted_sequence_number());
@@ -407,7 +418,16 @@ void RtpSenderEgress::AddPacketToTransportFeedback(
     //sandy: Mp-WebRTC
     packet_info.mp_transport_sequence_number=*(packet.GetExtension<MpTransportSequenceNumber>());//sandy
     packet_info.mp_rtp_sequence_number=packet.subflow_seq;//sandy
-    if(!packet.subflow_id){
+    //sandy: For the redudnat scheuler both paths should be notified
+    if(( mpcollector_->MpGetScheduler().find("red")!=std::string::npos) && mpcollector_->MpISsecondPathOpen()){
+      packet_info.pathid=1;
+      packet_info.pathid=1;
+      transport_feedback_observer_->OnAddPacket(packet_info);
+      packet_info.pathid=2;
+      packet_info.pathid=2;
+      transport_feedback_observer_->OnAddPacket(packet_info);
+    }
+    else if(!packet.subflow_id){
       packet_info.pathid=1;//sandy If the subflow id is not set, use primary path
     }else{
       packet_info.pathid=packet.subflow_id;//sandy
@@ -552,7 +572,6 @@ void RtpSenderEgress::UpdateRtpStats(const RtpPacketToSend& packet) {
   int64_t now_ms = clock_->TimeInMilliseconds();
   // RTC_LOG(INFO)<<"sandyrtp path id of the packet being sent "<<packet.subflow_id<<"\n";
   StreamDataCounters* counters=NULL;
-
   if(packet.subflow_id==1){
     counters = packet.Ssrc() == rtx_ssrc_ ? &rtx_rtp_stats_p_ : &rtp_stats_p_;
 

@@ -163,7 +163,10 @@ void PacketRouter::SendPacket(std::unique_ptr<RtpPacketToSend> packet,
       packet->subflow_id=packet->subflow_id;//sandy: Retransmission packets saves only flow id
     }
     packet->SetExtension<TransportSequenceNumber>((++transport_seq_) & 0xFFFF);
-    if(packet->subflow_id!=2 ){
+    if(( mpcollector_->MpGetScheduler().find("red")!=std::string::npos) && mpcollector_->MpISsecondPathOpen()){
+      packet->SetExtension<MpTransportSequenceNumber>((transport_seq_) & 0xFFFF);
+    }
+    else if(packet->subflow_id!=2 ){
       packet->SetExtension<MpTransportSequenceNumber>((++transport_seq_p_) & 0xFFFF);
       // RTC_LOG(INFO)<<"sandystats sending the packet in primary path seq="<<(transport_seq_&0xFFFF)<<" mp= "<< 
       // ((transport_seq_p_)&0xFFFF);

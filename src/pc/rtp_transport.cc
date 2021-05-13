@@ -183,11 +183,12 @@ bool RtpTransport::UnregisterRtpDemuxerSink(RtpPacketSinkInterface* sink) {
 void RtpTransport::DemuxPacket(rtc::CopyOnWriteBuffer packet,
                                int64_t packet_time_us,int pathid) {
 
-  // RTC_LOG(INFO)<<"sandystats doing DTLS received packet "<<packet.GetPathid();
-
+  
+  packet.SetPathid(pathid);
+  RTC_LOG(INFO)<<"sandystats received packet on rtp_demux "<<packet.GetPathid();
   webrtc::RtpPacketReceived parsed_packet(&header_extension_map_);
   //sandy: Set the pathid of the packet here
-  parsed_packet.pathid=pathid;
+  
   if (!parsed_packet.Parse(std::move(packet))) {
     RTC_LOG(LS_ERROR)
         << "Failed to parse the incoming RTP packet before demuxing. Drop it.";
@@ -197,6 +198,7 @@ void RtpTransport::DemuxPacket(rtc::CopyOnWriteBuffer packet,
   if (packet_time_us != -1) {
     parsed_packet.set_arrival_time_ms((packet_time_us + 500) / 1000);
   }
+  parsed_packet.pathid=packet.GetPathid();
   if (!rtp_demuxer_.OnRtpPacket(parsed_packet)) {
     RTC_LOG(LS_WARNING) << "Failed to demux RTP packet: "
                         << RtpDemuxer::DescribePacket(parsed_packet);
@@ -249,6 +251,9 @@ void RtpTransport::OnReadPacket(rtc::PacketTransportInternal* transport,
                                 const int64_t& packet_time_us,
                                 int flags) {
   TRACE_EVENT0("webrtc", "RtpTransport::OnReadPacket");
+  rtc::CopyOnWriteBuffer packet(data, len,flags);
+  packet.SetPathid(flags);
+
   // RTC_DCHECK(flags>1);
 
   // When using RTCP multiplexing we might get RTCP packets on the RTP
@@ -269,14 +274,14 @@ void RtpTransport::OnReadPacket(rtc::PacketTransportInternal* transport,
     return;
   }
   
-  rtc::CopyOnWriteBuffer packet(data, len,flags);
+  
   
 
   if (packet_type == cricket::RtpPacketType::kRtcp) {
     OnRtcpPacketReceived(std::move(packet), packet_time_us);
   } else {
-    // RTC_LOG(INFO)<<"sandystats doing DTLS received packet after pathset "<<flags;
-    OnRtpPacketReceived(packet, packet_time_us,flags);
+    RTC_LOG(INFO)<<"sandystats received packet on rtp_read "<<packet.GetPathid();
+    OnRtpPacketReceived(packet, packet_time_us,packet.GetPathid());
   }
 }
 
