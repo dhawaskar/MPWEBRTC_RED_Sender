@@ -431,6 +431,7 @@ void RtpTransportControllerSend::OnSentPacket(
     absl::optional<SentPacket> packet_msg;
     RTC_DCHECK_RUN_ON(&task_queue_);
     int pathid=sent_packet.pathid;
+    RTC_LOG(INFO)<<"sandystats sent packet on path "<<pathid;
     if(sent_packet.packet_id != -1){
       // RTC_LOG(INFO)<<"sandystats the packet is sent on path id ="<<pathid;
       RTC_DCHECK(pathid>0);
@@ -594,6 +595,7 @@ void RtpTransportControllerSend::OnAddPacket(
     RTC_DCHECK_RUN_ON(&task_queue_);
 
     int pathid=packet_info.pathid;
+    RTC_LOG(INFO)<<"sandystats added packet on path "<<pathid;
     RTC_DCHECK(pathid>0);
     if(pathid!=2){
       transport_feedback_adapter_.AddPacket(
@@ -614,6 +616,7 @@ void RtpTransportControllerSend::OnTransportFeedback(
     const rtcp::TransportFeedback& feedback) {
 
   int pathid=feedback.pathid();
+  RTC_LOG(INFO)<<"sandystats TFB packet on path "<<pathid;
   RTC_DCHECK(pathid>0);
   feedback_demuxer_.OnTransportFeedback(feedback,pathid);
   auto feedback_time = Timestamp::Millis(clock_->TimeInMilliseconds());

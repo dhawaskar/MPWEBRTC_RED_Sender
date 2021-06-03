@@ -429,10 +429,12 @@ void RtpSenderEgress::AddPacketToTransportFeedback(
     }
     else if(!packet.subflow_id){
       packet_info.pathid=1;//sandy If the subflow id is not set, use primary path
+      transport_feedback_observer_->OnAddPacket(packet_info);
     }else{
       packet_info.pathid=packet.subflow_id;//sandy
+      transport_feedback_observer_->OnAddPacket(packet_info);
     }
-    transport_feedback_observer_->OnAddPacket(packet_info);
+    
   }
 }
 

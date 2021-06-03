@@ -1569,12 +1569,7 @@ int P2PTransportChannel::SendPacket(const char* data,
     error_ = ENOTCONN;
     return -1;
   }
-  if (second_connection_){
-    if(!ReadyToSend(second_connection_) ) {
-      error_ = ENOTCONN;
-      return -1;
-    }
-  }
+  
   
 
   last_sent_packet_id_ = options.packet_id;
