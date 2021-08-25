@@ -31,7 +31,8 @@
 #include "rtc_base/third_party/sigslot/sigslot.h"
 #include "rtc_base/trace_event.h"
 #include "rtc_base/zero_memory.h"
-
+#include "api/mp_collector.h"
+#include "api/mp_global.h"
 namespace webrtc {
 
 SrtpTransport::SrtpTransport(bool rtcp_mux_enabled)
@@ -202,9 +203,9 @@ bool SrtpTransport::SendRtcpPacket(rtc::CopyOnWriteBuffer* packet,
 
 void SrtpTransport::OnRtpPacketReceived(rtc::CopyOnWriteBuffer packet,
                                         int64_t packet_time_us,int pathid) {
-  // RTC_DCHECK(pathid>1);
-  
-  packet.SetPathid(pathid);
+  RTC_LOG(INFO)<<"sandystats received packet on srtp "<<packet.GetPathid()<<":"<<pathid;
+  RTC_DCHECK(packet.GetPathid()>0);  
+  //packet.SetPathid(pathid);
 
   if (!IsSrtpActive()) {
     RTC_LOG(LS_ERROR)
@@ -214,10 +215,32 @@ void SrtpTransport::OnRtpPacketReceived(rtc::CopyOnWriteBuffer packet,
   TRACE_EVENT0("webrtc", "SRTP Decode");
   char* data = packet.data<char>();
   int len = rtc::checked_cast<int>(packet.size());
-  if (!UnprotectRtp(data, len, &len)) {
-    int seq_num = -1;
-    uint32_t ssrc = 0;
+  int seq_num = -1;
+  /*
+  sandy: When the redundent scheduler in place, we filter out packets with same sequence numbers as we only use two paths in network and think
+  it as one single path.
+  */
+  if(( mpcollector_->MpGetScheduler().find("red")!=std::string::npos) && mpcollector_->MpISsecondPathOpen()){
+    
     cricket::GetRtpSeqNum(data, len, &seq_num);
+    if(recv_seq_list_.find(seq_num)!= recv_seq_list_.end()){
+      return;
+    }else{
+      if(recv_seq_list_.size()>MPBUFFERSIZE)
+        recv_seq_list_.erase(recv_seq_list_.begin(),recv_seq_list_.end());
+      recv_seq_list_.insert ( std::pair<int,int>(seq_num,seq_num) );
+    }
+    RTC_LOG(INFO)<<"sandystats received packet on rtp_read seq= "<<seq_num<<" pathid= "<<packet.GetPathid()<<" global mp seq="<<recv_seq_list_[seq_num];
+    packet.SetPathid(1);//Only single path
+  }
+  /*
+  */
+
+  if (!UnprotectRtp(data, len, &len)){// && packet.GetPathid()!=2) {//sandy : I am commeting this as packet from secondary path might be same
+    //as primary and cause some problems
+    // int seq_num = -1;
+    uint32_t ssrc = 0;
+    // cricket::GetRtpSeqNum(data, len, &seq_num);
     cricket::GetRtpSsrc(data, len, &ssrc);
 
     // Limit the error logging to avoid excessive logs when there are lots of
@@ -234,7 +257,6 @@ void SrtpTransport::OnRtpPacketReceived(rtc::CopyOnWriteBuffer packet,
     return;
   }
   packet.SetSize(len);
-  RTC_LOG(INFO)<<"sandystats received packet on srtp "<<packet.GetPathid();
   DemuxPacket(std::move(packet), packet_time_us,packet.GetPathid());
 }
 
@@ -249,6 +271,10 @@ void SrtpTransport::OnRtcpPacketReceived(rtc::CopyOnWriteBuffer packet,
   char* data = packet.data<char>();
   int len = rtc::checked_cast<int>(packet.size());
   if (!UnprotectRtcp(data, len, &len)) {
+    if(( mpcollector_->MpGetScheduler().find("red")!=std::string::npos)){
+      // RTC_LOG(INFO)<<"sandy duplicate RTCP packets being dropped from path= "<<packet.GetPathid();
+      return;
+    }
     int type = -1;
     cricket::GetRtcpType(data, len, &type);
     RTC_LOG(LS_ERROR) << "Failed to unprotect RTCP packet: size=" << len

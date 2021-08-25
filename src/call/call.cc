@@ -1291,16 +1291,16 @@ PacketReceiver::DeliveryStatus Call::DeliverRtcp(MediaType media_type,
 PacketReceiver::DeliveryStatus Call::DeliverRtp(MediaType media_type,
                                                 rtc::CopyOnWriteBuffer packet,
                                                 int64_t packet_time_us,int pathid) {
-
-  RTC_LOG(INFO)<<"sandystats received packet on "<<pathid;
+  RTC_DCHECK(packet.GetPathid()>0);
+  RTC_LOG(INFO)<<"sandystats received packet on "<<packet.GetPathid()<<":"<<pathid;
 
   TRACE_EVENT0("webrtc", "Call::DeliverRtp");
   
 
 
   RtpPacketReceived parsed_packet;
-  parsed_packet.pathid=pathid;
-
+  parsed_packet.pathid=packet.GetPathid();
+  RTC_DCHECK(parsed_packet.pathid>0);
   if (!parsed_packet.Parse(std::move(packet)))
     return DELIVERY_PACKET_ERROR;
 
@@ -1342,13 +1342,15 @@ PacketReceiver::DeliveryStatus Call::DeliverRtp(MediaType media_type,
   /*sandy:check connection level pathid and RTP level pathid. In Redundant scheduler it will be different and hence
   it needs to be reset
   */
+
   RTPHeader header;
   parsed_packet.GetHeader(&header);
   if(header.extension.sandy!=parsed_packet.pathid){
     RTC_LOG(INFO)<<"sandy: This must Redundant scheduler RTP path= "<<header.extension.sandy<< 
     ":"<<parsed_packet.subflow_id<<"connection path= "<<parsed_packet.pathid;
     header.extension.sandy=parsed_packet.pathid;
-    parsed_packet.subflow_id=parsed_packet.pathid;
+   // parsed_packet.SetExtension<sandy>(1);//Only one path from here
+    parsed_packet.subflow_id=1;//only one path from here
     RTC_LOG(INFO)<<"sandy: This must Redundant scheduler RTP path= "<<header.extension.sandy<< 
     ":"<<parsed_packet.subflow_id<<"connection path= "<<parsed_packet.pathid;
   }
@@ -1506,14 +1508,14 @@ PacketReceiver::DeliveryStatus Call::MpDeliverPacket(
     MediaType media_type,
     rtc::CopyOnWriteBuffer packet,
     int64_t packet_time_us,int pathid) {
-
+  RTC_DCHECK(packet.GetPathid()>0);
   // RTC_LOG(INFO)<<"sandystats doing DTLS received packet "<<pathid;
   RTC_DCHECK_RUN_ON(worker_thread_);
 
   if (IsRtcp(packet.cdata(), packet.size()))
     return DeliverRtcp(media_type, packet.cdata(), packet.size());
 
-  return DeliverRtp(media_type, std::move(packet), packet_time_us,pathid);
+  return DeliverRtp(media_type, std::move(packet), packet_time_us,packet.GetPathid());
 }
 
 PacketReceiver::DeliveryStatus Call::DeliverPacket(
@@ -1568,7 +1570,7 @@ void Call::NotifyBweOfReceivedPacket(const RtpPacketReceived& packet,
   //sandy:Mp-WebRTC
   if(header.extension.hassandy){
     packet_msg.pathid=header.extension.sandy;
-    
+    RTC_LOG(LS_INFO)<<"sandy the path id :"<<packet.pathid<<" in header: "<<header.extension.sandy;
   }else{
     RTC_DLOG(LS_ERROR)<<"sandyrtp received RTP packet path id not set";
     packet_msg.pathid=1;

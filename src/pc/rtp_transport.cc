@@ -184,8 +184,8 @@ void RtpTransport::DemuxPacket(rtc::CopyOnWriteBuffer packet,
                                int64_t packet_time_us,int pathid) {
 
   
-  packet.SetPathid(pathid);
-  RTC_LOG(INFO)<<"sandystats received packet on rtp_demux "<<packet.GetPathid();
+  RTC_DCHECK(packet.GetPathid()>0);
+  RTC_LOG(INFO)<<"sandystats received packet on rtp_demux "<<packet.GetPathid()<<":"<<pathid;
   webrtc::RtpPacketReceived parsed_packet(&header_extension_map_);
   //sandy: Set the pathid of the packet here
   
@@ -237,7 +237,8 @@ void RtpTransport::OnSentPacket(rtc::PacketTransportInternal* packet_transport,
 
 void RtpTransport::OnRtpPacketReceived(rtc::CopyOnWriteBuffer packet,
                                        int64_t packet_time_us,int pathid) {
-  DemuxPacket(packet, packet_time_us,pathid);
+  RTC_DCHECK(packet.GetPathid()>0);
+  DemuxPacket(packet, packet_time_us,packet.GetPathid());
 }
 
 void RtpTransport::OnRtcpPacketReceived(rtc::CopyOnWriteBuffer packet,
@@ -252,10 +253,11 @@ void RtpTransport::OnReadPacket(rtc::PacketTransportInternal* transport,
                                 int flags) {
   TRACE_EVENT0("webrtc", "RtpTransport::OnReadPacket");
   rtc::CopyOnWriteBuffer packet(data, len,flags);
+ 
+
+  
+  RTC_DCHECK(flags>0);
   packet.SetPathid(flags);
-
-  // RTC_DCHECK(flags>1);
-
   // When using RTCP multiplexing we might get RTCP packets on the RTP
   // transport. We check the RTP payload type to determine if it is RTCP.
   auto array_view = rtc::MakeArrayView(data, len);
@@ -276,11 +278,12 @@ void RtpTransport::OnReadPacket(rtc::PacketTransportInternal* transport,
   
   
   
-
+  /*sandesh: You receive same RTP/RTCP packets on both the paths for REDUNDANT scheduler 
+  Hence you need to drop the duplicate one. Refer file srtp_transport.cc for below functions where duplicate packets
+  are droped. */
   if (packet_type == cricket::RtpPacketType::kRtcp) {
     OnRtcpPacketReceived(std::move(packet), packet_time_us);
   } else {
-    RTC_LOG(INFO)<<"sandystats received packet on rtp_read "<<packet.GetPathid();
     OnRtpPacketReceived(packet, packet_time_us,packet.GetPathid());
   }
 }

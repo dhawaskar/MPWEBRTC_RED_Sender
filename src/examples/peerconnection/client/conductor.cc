@@ -75,9 +75,9 @@ class CapturerTrackSource : public webrtc::VideoTrackSource {
     // const size_t kHeight = 2160;//1080
     // const size_t kWidth = 1920;//1920
     // const size_t kHeight = 1080;//1080
-    const size_t kWidth = 2048;//1920
-    const size_t kHeight = 1080;//1080
-    const size_t kFps = 60;
+    const size_t kWidth = 640;//2048;//1920
+    const size_t kHeight = 480;//;//1080
+    const size_t kFps = 30;
     std::unique_ptr<webrtc::test::VcmCapturer> capturer;
     std::unique_ptr<webrtc::VideoCaptureModule::DeviceInfo> info(
         webrtc::VideoCaptureFactory::CreateDeviceInfo());

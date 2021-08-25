@@ -14,15 +14,15 @@
 
 namespace rtc {
 
-CopyOnWriteBuffer::CopyOnWriteBuffer() : offset_(0), size_(0) {
+CopyOnWriteBuffer::CopyOnWriteBuffer() : offset_(0), size_(0),pathid_(0) {
   RTC_DCHECK(IsConsistent());
 }
 
 CopyOnWriteBuffer::CopyOnWriteBuffer(const CopyOnWriteBuffer& buf)
-    : buffer_(buf.buffer_), offset_(buf.offset_), size_(buf.size_) {}
+    : buffer_(buf.buffer_), offset_(buf.offset_), size_(buf.size_),pathid_(buf.pathid_) {}
 
 CopyOnWriteBuffer::CopyOnWriteBuffer(CopyOnWriteBuffer&& buf)
-    : buffer_(std::move(buf.buffer_)), offset_(buf.offset_), size_(buf.size_) {
+    : buffer_(std::move(buf.buffer_)), offset_(buf.offset_), size_(buf.size_),pathid_(buf.pathid_) {
   buf.offset_ = 0;
   buf.size_ = 0;
   RTC_DCHECK(IsConsistent());

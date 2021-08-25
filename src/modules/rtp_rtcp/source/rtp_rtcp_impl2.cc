@@ -259,7 +259,8 @@ void ModuleRtpRtcpImpl2::Process() {
     rtcp_sender_.SendRTCP(GetFeedbackStatePrimary(),kRtcpReport,0,0,1);
     
   }
-  if(rtcp_sender_.TimeToSendRTCPReport(false,2)&& mpcollector_->MpISsecondPathOpen()){//sandy: Check if second path open
+  if(rtcp_sender_.TimeToSendRTCPReport(false,2)&& mpcollector_->MpISsecondPathOpen() 
+  && !( mpcollector_->MpGetScheduler().find("red")!=std::string::npos)){//sandy: Check if second path open
     rtcp_sender_.SendRTCP(GetFeedbackStateSecondary(), kRtcpReport,0,0,2);
   }
   //MpWebRTC: Sending the primary and secondary feed back sandesh
@@ -517,7 +518,7 @@ bool ModuleRtpRtcpImpl2::OnSendingRtpFrame(uint32_t timestamp,
   // Make sure an RTCP report isn't queued behind a key frame.
 
   //sandy: Send the report for both path
-  if (rtcp_sender_.TimeToSendRTCPReport(force_sender_report,1)){//sandy: send it for each path
+  if (rtcp_sender_.TimeToSendRTCPReport(force_sender_report,1)){//sandy:redundant
     //RTC_LOG(INFO)<<"sandyrtt sending RTCP report: "<<kRtcpReport<<"\n";
     // RTC_LOG(INFO)<<"sandy just requesting to send the sender report\n";
     rtcp_sender_.SendRTCP(GetFeedbackStatePrimary(), kRtcpReport,0,0,1);
@@ -525,7 +526,8 @@ bool ModuleRtpRtcpImpl2::OnSendingRtpFrame(uint32_t timestamp,
   if (mpcollector_->MpISsecondPathOpen()&& rtcp_sender_.TimeToSendRTCPReport(force_sender_report,2)){//sandy: send it for each path
     //RTC_LOG(INFO)<<"sandyrtt sending RTCP report: "<<kRtcpReport<<"\n";
     // RTC_LOG(INFO)<<"sandy just requesting to send the sender report\n";
-    rtcp_sender_.SendRTCP(GetFeedbackStateSecondary(), kRtcpReport,0,0,2);
+    if(!( mpcollector_->MpGetScheduler().find("red")!=std::string::npos))
+      rtcp_sender_.SendRTCP(GetFeedbackStateSecondary(), kRtcpReport,0,0,2);
   }
 
   return true;
@@ -681,7 +683,7 @@ int32_t ModuleRtpRtcpImpl2::SendRTCP(RTCPPacketType packet_type) {//sandy: Reque
   //RTC_LOG(INFO)<<"sandyrtt sending RTCP report\n";
 
   //sandy: This is sent on demand and send it for both paths
-  if(!mpcollector_->MpISsecondPathOpen()){
+  if(!mpcollector_->MpISsecondPathOpen() || ( mpcollector_->MpGetScheduler().find("red")!=std::string::npos)){
     return rtcp_sender_.SendRTCP(GetFeedbackStatePrimary(), packet_type,0,0,1);//sandy: Pli is sent via primary path
   }else{
     rtcp_sender_.SendRTCP(GetFeedbackStatePrimary(), packet_type,0,0,1);//sandy: Pli is sent via primary path

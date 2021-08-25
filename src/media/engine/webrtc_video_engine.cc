@@ -1643,8 +1643,7 @@ void WebRtcVideoChannel::FillSendAndReceiveCodecStats(
 void WebRtcVideoChannel::OnPacketReceived(rtc::CopyOnWriteBuffer packet,
                                           int64_t packet_time_us,int pathid) {
 
-  RTC_LOG(INFO)<<"sandystats received packet on "<<pathid;
-  packet.SetPathid(pathid);
+  RTC_DCHECK(packet.GetPathid()>0);
   RTC_DCHECK_RUN_ON(&thread_checker_);
   const webrtc::PacketReceiver::DeliveryStatus delivery_result =
       call_->Receiver()->MpDeliverPacket(webrtc::MediaType::VIDEO, packet,

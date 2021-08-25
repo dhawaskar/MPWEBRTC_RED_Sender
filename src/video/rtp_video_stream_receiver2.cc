@@ -663,8 +663,10 @@ void RtpVideoStreamReceiver2::OnRecoveredPacket(const uint8_t* rtp_packet,
 // This method handles both regular RTP packets and packets recovered
 // via FlexFEC.
 void RtpVideoStreamReceiver2::OnRtpPacket(const RtpPacketReceived& packet) {
-
-  // RTC_LOG(INFO)<<"sandystats doing DTLS received packet "<<packet.pathid;
+  
+  RTPHeader header;
+  packet.GetHeader(&header);
+  RTC_LOG(INFO)<<"sandy the path id :"<<packet.pathid<<" in header: "<<header.extension.sandy;
   RTC_DCHECK(packet.pathid>0);
   RTC_DCHECK_RUN_ON(&worker_task_checker_);
 

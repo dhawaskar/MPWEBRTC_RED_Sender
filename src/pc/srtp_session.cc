@@ -19,6 +19,8 @@
 #include "system_wrappers/include/metrics.h"
 #include "third_party/libsrtp/include/srtp.h"
 #include "third_party/libsrtp/include/srtp_priv.h"
+#include "api/mp_collector.h"
+#include "api/mp_global.h"
 
 namespace cricket {
 
@@ -165,6 +167,9 @@ bool SrtpSession::UnprotectRtcp(void* p, int in_len, int* out_len) {
   *out_len = in_len;
   int err = srtp_unprotect_rtcp(session_, p, out_len);
   if (err != srtp_err_status_ok) {
+    if(( mpcollector_->MpGetScheduler().find("red")!=std::string::npos)){
+      return false;
+    }
     RTC_LOG(LS_WARNING) << "Failed to unprotect SRTCP packet, err=" << err;
     RTC_HISTOGRAM_ENUMERATION("WebRTC.PeerConnection.SrtcpUnprotectError",
                               static_cast<int>(err), kSrtpErrorCodeBoundary);

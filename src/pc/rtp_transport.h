@@ -30,6 +30,7 @@ namespace webrtc {
 
 class RtpTransport : public RtpTransportInternal {
  public:
+  
   RtpTransport(const RtpTransport&) = delete;
   RtpTransport& operator=(const RtpTransport&) = delete;
 

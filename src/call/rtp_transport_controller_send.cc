@@ -431,10 +431,38 @@ void RtpTransportControllerSend::OnSentPacket(
     absl::optional<SentPacket> packet_msg;
     RTC_DCHECK_RUN_ON(&task_queue_);
     int pathid=sent_packet.pathid;
-    RTC_LOG(INFO)<<"sandystats sent packet on path "<<pathid;
+
+    RTC_LOG(INFO)<<"sandystats sent packet on path id= "<<pathid<<"packet type = "<<(sent_packet.packet_id<0?"RTCP":"RTP");
+     /*
+    sandy: When the redundent scheduler is in place,we should only use one single sender and receiver controller.Hence srtp_transport.cc 
+    drops packets when redundant seq comes in and similarly at sender we should only not of unique sequence numbers
+    */
+    if(( mpcollector_->MpGetScheduler().find("red")!=std::string::npos) && mpcollector_->MpISsecondPathOpen() 
+      &&sent_packet.packet_id>0){
+      if(send_seq_list_.find(sent_packet.packet_id)!= send_seq_list_.end()){
+        return;
+      }else{
+        if(send_seq_list_.size()>MPBUFFERSIZE)
+          send_seq_list_.erase(send_seq_list_.begin(),send_seq_list_.end());
+        send_seq_list_.insert ( std::pair<int,int>(sent_packet.packet_id,sent_packet.packet_id) );
+      }
+      RTC_LOG(INFO)<<"sandystats received packet on rtp_read seq= "<<sent_packet.packet_id<<" pathid= "<<sent_packet.pathid;
+      pathid=1;
+    }
+    /*
+    */
+
     if(sent_packet.packet_id != -1){
       // RTC_LOG(INFO)<<"sandystats the packet is sent on path id ="<<pathid;
       RTC_DCHECK(pathid>0);
+    }
+    
+    /*Sandy: For Redundant scheduler, you sending the same packets on both path 1 and path 2  
+    and hence do not account them on P1 and P2. Below is for RTCP packets,if you look in p2p_transport_channel.cc file we have sent 
+    RTCP on primary path first and hence we only consider that and drop same RTCP sent on secondary path*/
+    if(( mpcollector_->MpGetScheduler().find("red")!=std::string::npos) && mpcollector_->MpISsecondPathOpen() &&
+      pathid==2 && sent_packet.packet_id<0){
+      return;
     }
     if(pathid!=2){
       packet_msg =
@@ -465,6 +493,7 @@ void RtpTransportControllerSend::OnReceivedPacket(
     NetworkControlUpdate update1,update2;
     RTC_DCHECK_RUN_ON(&task_queue_);
     int pathid=packet_msg.pathid;
+    //RTC_LOG(INFO)<<"sandystats received packet transport controller "<<pathid;
     if (controller_ && pathid!=2){
       update1=controller_->OnReceivedPacket(packet_msg);
     }else if(controller_s_ && pathid==2){
@@ -709,7 +738,8 @@ void RtpTransportControllerSend::StartProcessPeriodicTasks() {
         task_queue_.Get(), kPacerQueueUpdateInterval, [this]() {
           RTC_DCHECK_RUN_ON(&task_queue_);
           TimeDelta expected_queue_time = pacer()->ExpectedQueueTime();
-          if(mpcollector_->MpISsecondPathOpen()){//sandy: Change #1 double the Queue size
+          if(mpcollector_->MpISsecondPathOpen() &&!( mpcollector_->MpGetScheduler().find("red")!=std::string::npos)){
+          //sandy: Change #1 double the Queue size
             control_handler_->SetPacerQueue(expected_queue_time/4);
           }else
             control_handler_->SetPacerQueue(expected_queue_time);
@@ -764,7 +794,7 @@ void RtpTransportControllerSend::UpdateStreamsConfig() {
 
 void RtpTransportControllerSend::PostUpdates(NetworkControlUpdate update,NetworkControlUpdate update2) {
 
-  if(!mpcollector_->MpISsecondPathOpen()){
+  if(!mpcollector_->MpISsecondPathOpen() || ( mpcollector_->MpGetScheduler().find("red")!=std::string::npos)){//sandy: You have to check if redundant is in place
     if (update.congestion_window) {
       pp_congestion_window=update.congestion_window;
       pacer()->SetCongestionWindow(*update.congestion_window);
@@ -783,7 +813,7 @@ void RtpTransportControllerSend::PostUpdates(NetworkControlUpdate update,Network
       pp_target_rate=update.target_rate;
     }
   }else{
-    
+    // RTC_LOG(INFO)<<"sandyred non redundant scheuler";
     //sandy: Secondary path open and consider both of them
     //Congestion window
     //First change the pacer queue time
@@ -932,6 +962,7 @@ void RtpTransportControllerSend::OnReceivedRtcpReceiverReportBlocks(
       last_report_blocks_[report_block.source_ssrc] = report_block;
     }
   }else if(pathid==2){
+    RTC_LOG(INFO)<<"sandyred this is non-red scheduler";
     for (const RTCPReportBlock& report_block : report_blocks) {
       auto it = last_report_blocks_s_.find(report_block.source_ssrc);
       if (it != last_report_blocks_s_.end()) {
@@ -974,6 +1005,7 @@ void RtpTransportControllerSend::OnReceivedRtcpReceiverReportBlocks(
     last_report_block_time_ = now;
   }
   else if(controller_s_ && pathid==2){
+    RTC_LOG(INFO)<<"sandyred this is non-red scheduler";
     msg.start_time = last_report_block_time_s_;
     PostUpdates(update,controller_s_->OnTransportLossReport(msg));
     last_report_block_time_s_ = now;

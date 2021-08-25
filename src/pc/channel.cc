@@ -484,7 +484,7 @@ void BaseChannel::OnRtpPacket(const webrtc::RtpPacketReceived& parsed_packet) {
   }
 
   auto packet_buffer = parsed_packet.Buffer();
-  
+  packet_buffer.SetPathid(parsed_packet.pathid);
 
   invoker_.AsyncInvoke<void>(
       RTC_FROM_HERE, worker_thread_, [this, packet_buffer, packet_time_us,parsed_packet] {

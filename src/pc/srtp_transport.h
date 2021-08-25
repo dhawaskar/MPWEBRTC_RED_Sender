@@ -36,6 +36,8 @@ namespace webrtc {
 // parameters for the SrtpSession underneath.
 class SrtpTransport : public RtpTransport {
  public:
+  std::map<int, int> recv_seq_list_;//sandy:global sequence number to drop packets for redunden scheulers
+  unsigned long MPBUFFERSIZE=10000;
   explicit SrtpTransport(bool rtcp_mux_enabled);
 
   virtual ~SrtpTransport() = default;

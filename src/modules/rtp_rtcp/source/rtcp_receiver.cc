@@ -196,7 +196,7 @@ void RTCPReceiver::IncomingPacket(rtc::ArrayView<const uint8_t> packet) {
           }
           break;
         }
-        //RTC_LOG(INFO)<<"sandystats path id of RTCP packet received "<<rtcp_block.pathid()<<" type "<< 
+        RTC_LOG(INFO)<<"sandystats path id of RTCP packet received "<<rtcp_block.pathid()<<" type "<< 
       rtcp_block.type();     
    }
    // RTC_LOG(INFO)<<"*** sandystats path id of RTCP packet received End ***\n";

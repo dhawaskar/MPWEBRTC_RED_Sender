@@ -563,10 +563,6 @@ void DtlsTransport::OnReadPacket(rtc::PacketTransportInternal* transport,
                                  int flags) {
   RTC_DCHECK_RUN_ON(&thread_checker_);
   RTC_DCHECK(transport == ice_transport_);
-  int pathid=flags;
-  flags=0;
-  RTC_DCHECK(flags ==0);//sandy
-  
 
   if (!dtls_active_) {
     // Not doing DTLS.
@@ -636,7 +632,7 @@ void DtlsTransport::OnReadPacket(rtc::PacketTransportInternal* transport,
         // Signal this upwards as a bypass packet.
         // RTC_LOG(INFO)<<"sandystats doing DTLS received packet after pathset "<<PF_SRTP_BYPASS;
         // SignalReadPacket(this, data, size, packet_time_us, PF_SRTP_BYPASS);
-        SignalReadPacket(this, data, size, packet_time_us, pathid);
+        SignalReadPacket(this, data, size, packet_time_us, flags);
       }
       break;
     case DTLS_TRANSPORT_FAILED:

@@ -1582,20 +1582,20 @@ int P2PTransportChannel::SendPacket(const char* data,
 
   // selected_connection_->Send(data, len, modified_options);
   if(( mpcollector_->MpGetScheduler().find("red")!=std::string::npos) && mpcollector_->MpISsecondPathOpen()){
-    
-    modified_options.pathid=2;
-    sent=second_connection_->Send(data, len, modified_options);
-    if (sent <= 0) {
-      RTC_DCHECK(sent < 0);
-      error_ = second_connection_->GetError();
-    }
-
+  //sandy: Both RTP and RTCP packets should be sent both paths. Best path packets are considered and hence best path RTT is used.
 
     modified_options.pathid=1;//sandy: Copy the pathid
     sent = selected_connection_->Send(data, len, modified_options);
     if (sent <= 0) {
       RTC_DCHECK(sent < 0);
        error_ = selected_connection_->GetError();
+    }
+
+    modified_options.pathid=2;
+    sent=second_connection_->Send(data, len, modified_options);
+    if (sent <= 0) {
+      RTC_DCHECK(sent < 0);
+      error_ = second_connection_->GetError();
     }
   }
   else if(options.pathid!=2 || !second_connection_){

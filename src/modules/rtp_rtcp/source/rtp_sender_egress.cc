@@ -246,8 +246,8 @@ void RtpSenderEgress::SendPacket(RtpPacketToSend* packet,
     if(( mpcollector_->MpGetScheduler().find("red")!=std::string::npos) && mpcollector_->MpISsecondPathOpen()){
       packet_history_p_->PutRtpPacket(std::make_unique<RtpPacketToSend>(*packet),
                                   now_ms);
-      packet_history_s_->PutRtpPacket(std::make_unique<RtpPacketToSend>(*packet),
-                                  now_ms);
+      // packet_history_s_->PutRtpPacket(std::make_unique<RtpPacketToSend>(*packet),
+      //                             now_ms);
     }
     else if(packet->subflow_id!=2){//sandy: Primary path add the packets
       packet_history_p_->PutRtpPacket(std::make_unique<RtpPacketToSend>(*packet),
@@ -259,7 +259,7 @@ void RtpSenderEgress::SendPacket(RtpPacketToSend* packet,
   } else if (packet->retransmitted_sequence_number()) {
     if(( mpcollector_->MpGetScheduler().find("red")!=std::string::npos) && mpcollector_->MpISsecondPathOpen()){
       packet_history_p_->MarkPacketAsSent(*packet->retransmitted_sequence_number());
-      packet_history_s_->MarkPacketAsSent(*packet->retransmitted_sequence_number());
+      // packet_history_s_->MarkPacketAsSent(*packet->retransmitted_sequence_number());
     }
     else if(packet->subflow_id!=2)
       packet_history_p_->MarkPacketAsSent(*packet->retransmitted_sequence_number());
@@ -423,9 +423,9 @@ void RtpSenderEgress::AddPacketToTransportFeedback(
       packet_info.pathid=1;
       packet_info.pathid=1;
       transport_feedback_observer_->OnAddPacket(packet_info);
-      packet_info.pathid=2;
-      packet_info.pathid=2;
-      transport_feedback_observer_->OnAddPacket(packet_info);
+      // packet_info.pathid=2;
+      // packet_info.pathid=2;
+      // transport_feedback_observer_->OnAddPacket(packet_info);
     }
     else if(!packet.subflow_id){
       packet_info.pathid=1;//sandy If the subflow id is not set, use primary path

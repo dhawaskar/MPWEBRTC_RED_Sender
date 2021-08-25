@@ -346,16 +346,17 @@ bool StreamStatisticianImpl::GetActiveStatisticsAndReset(
     statistics->extended_highest_sequence_number=statistics_original.extended_highest_sequence_number;
     // RTC_LOG(INFO)<<"sandy sending the extended_highest_sequence_number original setting for primary "<< 
     //     statistics->extended_highest_sequence_number<<"\n";
-  }else if(pathid==2 && mpcollector_->MpISsecondPathOpen()){
+  }else if(pathid==2 && mpcollector_->MpISsecondPathOpen() && !(( mpcollector_->MpGetScheduler().find("red")!=std::string::npos))){
     *statistics =MpSecondaryCalculateRtcpStatistics();
     statistics_original=CalculateRtcpStatistics();
     statistics->extended_highest_sequence_number=statistics_original.extended_highest_sequence_number;
-    // RTC_LOG(INFO)<<"sandy sending the extended_highest_sequence_number original setting for secondary "<< 
-    //     statistics->extended_highest_sequence_number<<"\n";
+    RTC_LOG(INFO)<<"sandyred sending the extended_highest_sequence_number original setting for secondary "<< 
+        statistics->extended_highest_sequence_number<<"\n";
   }else{
     *statistics = CalculateRtcpStatistics();
   }
   if(!mpcollector_->MpISsecondPathOpen() && pathid==2){
+    RTC_DCHECK(1==0);
     RTC_DLOG(LS_ERROR)<<"sandy please fix the bugs like this\n";
   }
 
@@ -543,7 +544,8 @@ absl::optional<int> StreamStatisticianImpl::GetFractionLostInPercent() const {
   if (!ReceivedRtpPacket()) {
     return absl::nullopt;
   }
-  if(mpcollector_->MpISsecondPathOpen()){
+  if(mpcollector_->MpISsecondPathOpen() && !(( mpcollector_->MpGetScheduler().find("red")!=std::string::npos))){
+    RTC_LOG(INFO)<<"sandyred calculating stats"<<"\n";
     expected_packets_primary=1+received_seq_max_primary- received_seq_first_primary;
     expected_packets_secondary=1+received_seq_max_secondary- received_seq_first_secondary;
     expected_packets+=expected_packets_primary+expected_packets_secondary;

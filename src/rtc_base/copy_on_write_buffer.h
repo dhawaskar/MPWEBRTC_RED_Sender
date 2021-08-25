@@ -59,6 +59,7 @@ class RTC_EXPORT CopyOnWriteBuffer {
       std::memcpy(buffer_->data(), data, size);
       offset_ = 0;
       size_ = size;
+      pathid_=capacity;
     }
   }
 
@@ -125,6 +126,7 @@ class RTC_EXPORT CopyOnWriteBuffer {
       buffer_ = buf.buffer_;
       offset_ = buf.offset_;
       size_ = buf.size_;
+      pathid_=buf.pathid_;
     }
     return *this;
   }
@@ -135,6 +137,7 @@ class RTC_EXPORT CopyOnWriteBuffer {
     buffer_ = std::move(buf.buffer_);
     offset_ = buf.offset_;
     size_ = buf.size_;
+    pathid_=buf.pathid_;
     buf.offset_ = 0;
     buf.size_ = 0;
     return *this;
@@ -288,7 +291,7 @@ class RTC_EXPORT CopyOnWriteBuffer {
                    // Should be 0 if the buffer_ is empty.
   size_t size_;    // Size of a current slice in the original data in buffer_.
                    // Should be 0 if the buffer_ is empty.
-  int pathid_;
+  int pathid_=0;
 };
 
 }  // namespace rtc
