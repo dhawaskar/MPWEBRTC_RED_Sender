@@ -67,6 +67,7 @@ class RtpVideoStreamReceiver2 : public LossNotificationSender,
                                 public OnDecryptionStatusChangeCallback,
                                 public RtpVideoFrameReceiver {
  public:
+  
   RtpVideoStreamReceiver2(
       TaskQueueBase* current_queue,
       Clock* clock,
@@ -89,6 +90,7 @@ class RtpVideoStreamReceiver2 : public LossNotificationSender,
       rtc::scoped_refptr<FrameDecryptorInterface> frame_decryptor,
       rtc::scoped_refptr<FrameTransformerInterface> frame_transformer);
   ~RtpVideoStreamReceiver2() override;
+ 
 
   void AddReceiveCodec(const VideoCodec& video_codec,
                        const std::map<std::string, std::string>& codec_params,
@@ -180,7 +182,27 @@ class RtpVideoStreamReceiver2 : public LossNotificationSender,
   // themselves as secondary sinks.
   void AddSecondarySink(RtpPacketSinkInterface* sink);
   void RemoveSecondarySink(const RtpPacketSinkInterface* sink);
+  struct Frametimings {//sandy: To measure the rate of increase and decrease of RTT gap
+    Frametimings(double count,double times):count(count),times(times){}
+      double count;
+      double times;
+    };
+   double LinearFitSlope(
+    const std::deque<RtpVideoStreamReceiver2::Frametimings> & frametimes);
+  
 
+  void MpUpdateThreshold(double modified_trend,int64_t now_ms);
+  
+
+  std::deque<Frametimings> frame_timings_;
+  double mp_accumulated_timings_=0.0;
+  double mp_smoothed_timings_=0.0;
+  double mp_first_arrival_time_ms_=-1;
+  double prev_trend_=0.0;
+  int num_of_deltas_=0;
+  int64_t last_update_ms_=-1;
+  double threshold_=12.5;
+  int64_t key_frame_interval=300,last_key_frame_time=0;
  private:
   // Implements RtpVideoFrameReceiver.
   void ManageFrame(
@@ -217,7 +239,7 @@ class RtpVideoStreamReceiver2 : public LossNotificationSender,
 
     // Send all RTCP feedback messages buffered thus far.
     void SendBufferedRtcpFeedback();
-
+    
    private:
     // LNTF-related state.
     struct LossNotificationState {
@@ -255,7 +277,7 @@ class RtpVideoStreamReceiver2 : public LossNotificationSender,
     kHasGenericDescriptor,
     kNoGenericDescriptor
   };
-
+  
   // Entry point doing non-stats work for a received packet. Called
   // for the same packet both before and after RED decapsulation.
   void ReceivePacket(const RtpPacketReceived& packet);
@@ -267,6 +289,7 @@ class RtpVideoStreamReceiver2 : public LossNotificationSender,
   bool IsRedEnabled() const;
   void InsertSpsPpsIntoTracker(uint8_t payload_type);
   void OnInsertedPacket(video_coding::PacketBuffer::InsertResult result);
+  
   ParseGenericDependenciesResult ParseGenericDependenciesExtension(
       const RtpPacketReceived& rtp_packet,
       RTPVideoHeader* video_header) RTC_RUN_ON(worker_task_checker_);
@@ -363,6 +386,8 @@ class RtpVideoStreamReceiver2 : public LossNotificationSender,
 
   rtc::scoped_refptr<RtpVideoStreamReceiverFrameTransformerDelegate>
       frame_transformer_delegate_;
+
+
 };
 
 }  // namespace webrtc

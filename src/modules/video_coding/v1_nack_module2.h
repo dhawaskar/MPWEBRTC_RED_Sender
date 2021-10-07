@@ -44,12 +44,12 @@ class NackModule2 final {
               TimeDelta update_interval = kUpdateInterval);
   ~NackModule2();
 
-  int OnReceivedPacket(uint16_t seq_num, bool is_keyframe);
-  int OnReceivedPacket(uint16_t seq_num, bool is_keyframe, bool is_recovered);
+  int OnReceivedPacket(uint16_t seq_num,uint16_t mp_seq_num, bool is_keyframe,int pathid);
+  int OnReceivedPacket(uint16_t seq_num,uint16_t mp_seq_num, bool is_keyframe, bool is_recovered,int pathid);
 
   void ClearUpTo(uint16_t seq_num);
   void UpdateRtt(int64_t rtt_ms);
-
+  //void SetMpSeq(uint16_t seq_num);
  private:
   // Which fields to consider when deciding which packet to nack in
   // GetNackBatch.
@@ -62,13 +62,14 @@ class NackModule2 final {
     NackInfo();
     NackInfo(uint16_t seq_num,
              uint16_t send_at_seq_num,
-             int64_t created_at_time);
+             int64_t created_at_time,int pathid);
 
     uint16_t seq_num;
     uint16_t send_at_seq_num;
     int64_t created_at_time;
     int64_t sent_at_time;
     int retries;
+    int pathid_;
   };
 
   struct BackoffSettings {
@@ -82,15 +83,22 @@ class NackModule2 final {
     // Base for the exponential backoff.
     const double base;
   };
-
-  void AddPacketsToNack(uint16_t seq_num_start, uint16_t seq_num_end)
+  //sandy: Added below function to get Nack Size
+  uint64_t GetNackSize(int pathid) RTC_EXCLUSIVE_LOCKS_REQUIRED(worker_thread_);
+  void AddPacketsToNack(uint16_t seq_num_start, uint16_t seq_num_end,uint16_t mp_seq_num_start,uint16_t mp_seq_num_end,int pathid)
+      RTC_EXCLUSIVE_LOCKS_REQUIRED(worker_thread_);
+  void InsertPacketNack(uint16_t seq_num_start, uint16_t mp_seq_num,uint16_t seq_num_end,int pathid)
+      RTC_EXCLUSIVE_LOCKS_REQUIRED(worker_thread_);
+  void InsertPacketNackPrimary(uint16_t seq_num_start, uint16_t mp_seq_num,uint16_t seq_num_end,int pathid)
+      RTC_EXCLUSIVE_LOCKS_REQUIRED(worker_thread_);
+  void InsertPacketNackSecondary(uint16_t seq_num_start, uint16_t mp_seq_num,uint16_t seq_num_end,int pathid)
       RTC_EXCLUSIVE_LOCKS_REQUIRED(worker_thread_);
 
   // Removes packets from the nack list until the next keyframe. Returns true
   // if packets were removed.
   bool RemovePacketsUntilKeyFrame()
       RTC_EXCLUSIVE_LOCKS_REQUIRED(worker_thread_);
-  std::vector<uint16_t> GetNackBatch(NackFilterOptions options)
+  std::vector<uint16_t> GetNackBatch(NackFilterOptions options,int pathid)
       RTC_EXCLUSIVE_LOCKS_REQUIRED(worker_thread_);
 
   // Update the reordering distribution.
@@ -121,10 +129,22 @@ class NackModule2 final {
       RTC_GUARDED_BY(worker_thread_);
   std::set<uint16_t, DescendingSeqNumComp<uint16_t>> recovered_list_
       RTC_GUARDED_BY(worker_thread_);
+
+  std::map<uint16_t, uint16_t> nack_list_p_
+      RTC_GUARDED_BY(worker_thread_);
+
+  std::map<uint16_t, uint16_t> nack_list_s_
+      RTC_GUARDED_BY(worker_thread_);
+
+
   video_coding::Histogram reordering_histogram_ RTC_GUARDED_BY(worker_thread_);
   bool initialized_ RTC_GUARDED_BY(worker_thread_);
+  bool initialized_mp_ RTC_GUARDED_BY(worker_thread_);
   int64_t rtt_ms_ RTC_GUARDED_BY(worker_thread_);
   uint16_t newest_seq_num_ RTC_GUARDED_BY(worker_thread_);
+  uint16_t newest_seq_num_p_ RTC_GUARDED_BY(worker_thread_);
+  uint16_t newest_seq_num_s_ RTC_GUARDED_BY(worker_thread_);
+  uint16_t mp_seq_num_ RTC_GUARDED_BY(worker_thread_);
 
   // Adds a delay before send nack on packet received.
   const int64_t send_nack_delay_ms_;

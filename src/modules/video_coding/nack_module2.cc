@@ -19,28 +19,24 @@
 #include "rtc_base/logging.h"
 #include "rtc_base/task_queue.h"
 #include "system_wrappers/include/field_trial.h"
-#include "api/mp_collector.h"
-#include "api/mp_global.h"
 
 namespace webrtc {
 
 namespace {
-//const int kMpNackTherhsold = 10;//sandy: Added this
-const int kMaxPacketAge = 10000;//sandy: For Mp-webrT
-const int kMaxNackPackets = 1000;//sandy: For Mp-WebRTC I will tkae this as 1500 as packets coming from both path.
+const int kMaxPacketAge = 10000;
+const int kMaxNackPackets = 1000;
 const int kDefaultRttMs = 100;
 const int kMaxNackRetries = 10;
 const int kMaxReorderedPackets = 128;
 const int kNumReorderingBuckets = 10;
 const int kDefaultSendNackDelayMs = 0;
-const int32_t kMpGapThreshold=0;//sandy: Since re-ordering is common we will not report loss unless it is >10
 
 int64_t GetSendNackDelay() {
   int64_t delay_ms = strtol(
       webrtc::field_trial::FindFullName("WebRTC-SendNackDelayMs").c_str(),
       nullptr, 10);
   if (delay_ms > 0 && delay_ms <= 20) {
-    // RTC_LOG(LS_INFO) << "SendNackDelay is set to " << delay_ms;
+    RTC_LOG(LS_INFO) << "SendNackDelay is set to " << delay_ms;
     return delay_ms;
   }
   return kDefaultSendNackDelayMs;
@@ -54,13 +50,12 @@ NackModule2::NackInfo::NackInfo()
 
 NackModule2::NackInfo::NackInfo(uint16_t seq_num,
                                 uint16_t send_at_seq_num,
-                                int64_t created_at_time,int pathid)
+                                int64_t created_at_time)
     : seq_num(seq_num),
       send_at_seq_num(send_at_seq_num),
       created_at_time(created_at_time),
       sent_at_time(-1),
-      retries(0),
-      pathid_(pathid) {}
+      retries(0) {}
 
 NackModule2::BackoffSettings::BackoffSettings(TimeDelta min_retry,
                                               TimeDelta max_rtt,
@@ -97,7 +92,7 @@ NackModule2::NackModule2(TaskQueueBase* current_queue,
                          Clock* clock,
                          NackSender* nack_sender,
                          KeyFrameRequestSender* keyframe_request_sender,
-                         TimeDelta update_interval /*= kUpdateInterval*/)
+                         TimeDelta update_interval /*= kUpdateInterval*/,int pathid)
     : worker_thread_(current_queue),
       update_interval_(update_interval),
       clock_(clock),
@@ -105,11 +100,8 @@ NackModule2::NackModule2(TaskQueueBase* current_queue,
       keyframe_request_sender_(keyframe_request_sender),
       reordering_histogram_(kNumReorderingBuckets, kMaxReorderedPackets),
       initialized_(false),
-      initialized_mp_(false),
       rtt_ms_(kDefaultRttMs),
       newest_seq_num_(0),
-      newest_seq_num_p_(0),
-      newest_seq_num_s_(0),
       send_nack_delay_ms_(GetSendNackDelay()),
       backoff_settings_(BackoffSettings::ParseFromFieldTrials()) {
   RTC_DCHECK(clock_);
@@ -121,24 +113,13 @@ NackModule2::NackModule2(TaskQueueBase* current_queue,
 
   repeating_task_ = RepeatingTaskHandle::DelayedStart(
       TaskQueueBase::Current(), update_interval_,
-      [this]() {
-
-        if(!mpcollector_)
-          mpcollector_=new MpCollector();
-
+      [this,pathid]() {
         RTC_DCHECK_RUN_ON(worker_thread_);
-        //sandy: Please get the nack batch for both primary and secondary paths
-        std::vector<uint16_t> nack_batch = GetNackBatch(kTimeOnly,1);
+        std::vector<uint16_t> nack_batch = GetNackBatch(kTimeOnly);
         if (!nack_batch.empty()) {
           // This batch of NACKs is triggered externally; there is no external
           // initiator who can batch them with other feedback messages.
-          nack_sender_->SendNack(nack_batch, /*buffering_allowed=*/false,1);//sandy: yet to implement
-        }
-        nack_batch = GetNackBatch(kTimeOnly,2);
-        if (!nack_batch.empty()) {
-          // This batch of NACKs is triggered externally; there is no external
-          // initiator who can batch them with other feedback messages.
-          nack_sender_->SendNack(nack_batch, /*buffering_allowed=*/false,2);//sandy: yet to implement
+          nack_sender_->SendNack(nack_batch, /*buffering_allowed=*/false,pathid);//Sandy: Dont know let us see
         }
         return update_interval_;
       },
@@ -150,36 +131,20 @@ NackModule2::~NackModule2() {
   repeating_task_.Stop();
 }
 
-int NackModule2::OnReceivedPacket(uint16_t seq_num, uint16_t mp_seq_num,bool is_keyframe,int pathid) {
+int NackModule2::OnReceivedPacket(uint16_t seq_num, bool is_keyframe,int pathid) {
   RTC_DCHECK_RUN_ON(worker_thread_);
   return OnReceivedPacket(seq_num, is_keyframe, false,pathid);
 }
 
-int NackModule2::OnReceivedPacket(uint16_t seq_num,uint16_t mp_seq_num,
+int NackModule2::OnReceivedPacket(uint16_t seq_num,
                                   bool is_keyframe,
                                   bool is_recovered,int pathid) {
-
-  RTC_DCHECK(pathid>0);
   RTC_DCHECK_RUN_ON(worker_thread_);
-
-  if(mpcollector_->MpISsecondPathOpen() && mp_seq_num!=seq_num && seq_num>0 && mp_seq_num>0 && !initialized_mp_){//sandy: This indicates Mp_webRTC is enabled
-    RTC_LOG(INFO)<<"sandystatsnack the mp-webrtc is enabled with seq="<<seq_num<<" and mp_seq ="<<mp_seq_num<<" pathid "<<pathid;
-    initialized_mp_=true;
-  }
-
-
+  // TODO(philipel): When the packet includes information whether it is
+  //                 retransmitted or not, use that value instead. For
+  //                 now set it to true, which will cause the reordering
+  //                 statistics to never be updated.
   bool is_retransmitted = true;
-
-  // RTC_LOG(INFO)<<"sandystatsnack:Received the packet "<<seq_num<<" path= "<<pathid<< 
-  // " subflow seq= "<<mp_seq_num<<"\n";
-
-  if(initialized_mp_ && newest_seq_num_p_==0 && pathid!=2){
-    newest_seq_num_p_=mp_seq_num;
-  }else if(initialized_mp_ && newest_seq_num_s_==0 && pathid==2){
-    newest_seq_num_s_=mp_seq_num;
-  }
-
-  
 
   if (!initialized_) {
     newest_seq_num_ = seq_num;
@@ -207,21 +172,6 @@ int NackModule2::OnReceivedPacket(uint16_t seq_num,uint16_t mp_seq_num,
     return nacks_sent_for_packet;
   }
 
-  if(initialized_mp_ &&  pathid!=2 && mp_seq_num>0){
-    if(nack_list_p_.size()>1000)
-      nack_list_p_.erase(nack_list_p_.begin(),nack_list_p_.end());
-    nack_list_p_[mp_seq_num]=seq_num;//add packet to primary path map
-    //RTC_LOG(INFO)<<"sandystatsnack added the packet to the list of primary path mp="<<mp_seq_num<< 
-    //" seq= "<<nack_list_p_[mp_seq_num]<<" size= "<<nack_list_p_.size();
-  }else if(initialized_mp_ && pathid==2 && mp_seq_num>0){
-    if(nack_list_s_.size()>1000)
-      nack_list_s_.erase(nack_list_s_.begin(),nack_list_s_.end());
-    
-    nack_list_s_[mp_seq_num]=seq_num;//add packet to primary path map
-    // RTC_LOG(INFO)<<"sandystatsnack added the packet to the list of secondary path mp="<<mp_seq_num<< 
-    // " seq= "<<nack_list_s_[mp_seq_num]<<" size "<<nack_list_s_.size();
-  }
-
   // Keep track of new keyframes.
   if (is_keyframe)
     keyframe_list_.insert(seq_num);
@@ -242,40 +192,16 @@ int NackModule2::OnReceivedPacket(uint16_t seq_num,uint16_t mp_seq_num,
     // Do not send nack for packets recovered by FEC or RTX.
     return 0;
   }
-  //sandy: Sandesh here changed +1 to +2 because sequence number gap is 2
-  if(initialized_mp_ && pathid!=2 && mp_seq_num!=newest_seq_num_p_)
-    AddPacketsToNack(newest_seq_num_ + 1, seq_num,  newest_seq_num_p_+1, mp_seq_num,pathid);
-  else if(initialized_mp_ && pathid==2 && mp_seq_num!=newest_seq_num_s_)
-    AddPacketsToNack(newest_seq_num_ + 1, seq_num,  newest_seq_num_s_+1, mp_seq_num,pathid);
-  else if(!initialized_mp_)
-    AddPacketsToNack(newest_seq_num_ + 1, seq_num,0,0,pathid);//sandy: Run default algorithm using -2
-  
-  // if(mp_seq_num==seq_num)//sandy: If mp_seq and seq are same then it is single path
 
-  //   AddPacketsToNack(newest_seq_num_ + 1, seq_num,pathid);
-  // else if(mp_seq_num!=0)
-  //   AddPacketsToNack(newest_seq_num_ + 2, seq_num,pathid);
+  AddPacketsToNack(newest_seq_num_ + 1, seq_num);
   newest_seq_num_ = seq_num;
-  if(initialized_mp_ && pathid!=2){
-    newest_seq_num_p_=mp_seq_num;
-  }else if(initialized_mp_ && pathid==2){
-    newest_seq_num_s_=mp_seq_num;
-  }
 
   // Are there any nacks that are waiting for this seq_num.
-  std::vector<uint16_t> nack_batch = GetNackBatch(kSeqNumOnly,1);
+  std::vector<uint16_t> nack_batch = GetNackBatch(kSeqNumOnly);
   if (!nack_batch.empty()) {
     // This batch of NACKs is triggered externally; the initiator can
     // batch them with other feedback messages.
-    // RTC_LOG(INFO)<<"sandystatsnack sending the primary nack list "<<nack_batch.size();
-    nack_sender_->SendNack(nack_batch, /*buffering_allowed=*/true,1);//sandy: send NACK batch for primary path
-  }
-  nack_batch = GetNackBatch(kSeqNumOnly,2);
-  if (!nack_batch.empty()) {
-    // This batch of NACKs is triggered externally; the initiator can
-    // batch them with other feedback messages.
-    // RTC_LOG(INFO)<<"sandystatsnack sending the secondary nack list "<<nack_batch.size();
-    nack_sender_->SendNack(nack_batch, /*buffering_allowed=*/true,2);//sandy: send NACK batch for secondary path
+    nack_sender_->SendNack(nack_batch, /*buffering_allowed=*/true,pathid);//sandy: 1 indicates path id but I am gone take it off
   }
 
   return 0;
@@ -316,183 +242,51 @@ bool NackModule2::RemovePacketsUntilKeyFrame() {
   }
   return false;
 }
-// void NackModule2::SetMpSeq(uint16_t seq_num){
-//   RTC_DCHECK_RUN_ON(worker_thread_);
 
-//   mp_seq_num=seq_num;
-// }
-void NackModule2::AddPacketsToNack(uint16_t seq_num_start, uint16_t seq_num_end, 
-  uint16_t mp_seq_num_start,uint16_t mp_seq_num_end,int pathid) {
+void NackModule2::AddPacketsToNack(uint16_t seq_num_start,
+                                   uint16_t seq_num_end) {
   // Called on worker_thread_.
   // Remove old packets.
-
-  // RTC_LOG(INFO)<<"sandystatsnackstatsnack adding packet to nack received"<<seq_num_start<<" from pathid ="<<pathid<< 
-  // " mp_seq start "<<mp_seq_num_start<<" mp_seq_end "<<mp_seq_num_end<<"\n";
-  mp_seq_num_=mp_seq_num_end;
-
   auto it = nack_list_.lower_bound(seq_num_end - kMaxPacketAge);
   nack_list_.erase(nack_list_.begin(), it);
-  uint16_t num_new_nacks=0;
-  if( pathid!=2 && mp_seq_num_start>0){//sandy:Primary path nack handler
-      num_new_nacks=ForwardDiff(mp_seq_num_start,mp_seq_num_end);
-      // RTC_LOG(INFO)<<"sandystatsnack the primary NACK gap is "<<num_new_nacks<<" s: "<< 
-      // mp_seq_num_start <<" e: "<<mp_seq_num_end<<" last mp= "<<newest_seq_num_p_<<" last seq= " 
-      // <<seq_num_start-1<<" cur seq= "<<seq_num_end<<"\n";
-  }else if( pathid==2 && mp_seq_num_start>0){//sandy:secondary path nack handler
-      num_new_nacks=ForwardDiff(mp_seq_num_start,mp_seq_num_end);
-      // RTC_LOG(INFO)<<"sandystatsnack the secondary NACK gap is "<<num_new_nacks<<" s: "<<mp_seq_num_start  
-      //  <<" e: "<<mp_seq_num_end<<" last mp= "<<newest_seq_num_s_<<" last seq= " 
-      // <<seq_num_start-1<<" cur seq= "<<seq_num_end<<"\n";
-  }
-  else{
-    num_new_nacks=ForwardDiff(seq_num_start,seq_num_end);
-    // RTC_LOG(INFO)<<"sandystatsnack the default NACK gap "<<num_new_nacks<<" s: "<< 
-    //   seq_num_start <<" e: "<<seq_num_end<<"\n";
-  }
-  //sandy: Packets received here are already sorted and hence no need to keeo reorder buffer here
-  // if(num_new_nacks< kMpNackTherhsold){//Nack thershold ,sandy: I added this as re-orering could be happening so
-  //   return;
-  // }
-  // uint64_t p_nack_size=0;
-  // uint64_t s_nack_size=0;
-  // p_nack_size=GetNackSize(1);
-  // s_nack_size=GetNackSize(2);
-  // RTC_LOG(INFO) << "sandystatsnack: NACK list size "<<pathid<< 
-  //       "Primary size "<<p_nack_size<<" secondary path nack size "<< 
-  //       s_nack_size<<" total "<<nack_list_.size()<<" Is Mp enabled? "<<initialized_mp_ <<" diff "<<num_new_nacks 
-  //       <<" total max "<<kMaxNackPackets;
 
+  // If the nack list is too large, remove packets from the nack list until
+  // the latest first packet of a keyframe. If the list is still too large,
+  // clear it and request a keyframe.
+  uint16_t num_new_nacks = ForwardDiff(seq_num_start, seq_num_end);
   if (nack_list_.size() + num_new_nacks > kMaxNackPackets) {
-      while (RemovePacketsUntilKeyFrame() &&
-             nack_list_.size() + num_new_nacks > kMaxNackPackets) {
-      }
-
-      if (nack_list_.size() + num_new_nacks > kMaxNackPackets) {
-        nack_list_.clear();
-        keyframe_request_sender_->RequestKeyFrame();//sandy: yet to implement this
-        return;
-      }
-  }
-
-  if( pathid!=2 && mp_seq_num_end>0 && num_new_nacks>kMpGapThreshold){
-    InsertPacketNackPrimary(mp_seq_num_start-1,mp_seq_num_end,seq_num_end,pathid);
-  }else if( pathid==2 && mp_seq_num_end>0 && num_new_nacks>kMpGapThreshold){
-    InsertPacketNackSecondary(mp_seq_num_start-1,mp_seq_num_end,seq_num_end,pathid);
-  }else if(!initialized_mp_) {
-    InsertPacketNack(seq_num_start, mp_seq_num_end,seq_num_end,pathid);
-  }
-  
-  
-}
-void NackModule2::InsertPacketNackPrimary(uint16_t original_seq,uint16_t mp_seq_num,
-                                   uint16_t seq_num_end,int pathid){
-  
-    
-
-     auto it=nack_list_p_.find(original_seq);
-      if(it!=nack_list_p_.end()){
-        original_seq=it->second+2;
-        // RTC_LOG(INFO)<<"sandystatsnack the starting seq for primary = "<<original_seq<<" the ending seq_num_end= "<< 
-        // seq_num_end<<" mp_seq = "<<mp_seq_num<<"\n";
-      }else{
-        return;
-      }
-
-      // RTC_LOG(INFO)<<"sandystatsnack the insertion logic primary"<<original_seq<<" from pathid ="<<pathid<<" mp_seq: " 
-      //   <<mp_seq_num<<" : "<<mp_seq_num_<<"\n";
-
-      for (uint16_t seq_num =original_seq; seq_num !=seq_num_end; (seq_num+=2)) {//sandy: +1 is for Mp-WebRTC
-        
-        if (recovered_list_.find(seq_num) != recovered_list_.end())
-          continue;
-        RTC_DCHECK(nack_list_.find(seq_num) == nack_list_.end());
-        NackInfo nack_info(seq_num, seq_num + WaitNumberOfPackets(0.5),
-                           clock_->TimeInMilliseconds(),pathid);
-        
-        nack_list_[seq_num] = nack_info; //sandy: Adding to the NACK list
-        RTC_LOG(INFO)<<"sandystatsnackstatsnack insterted into primary nack list "<<seq_num<<" from pathid ="<<pathid<< 
-        " mp_seq: "<<mp_seq_num<<" : "<<mp_seq_num_<<" nack size is "<<nack_list_.size()<<"\n";
-      }
-     
-  
-}
-
-void NackModule2::InsertPacketNackSecondary(uint16_t original_seq,uint16_t mp_seq_num,
-                                   uint16_t seq_num_end,int pathid){
-
-  
-    auto it=nack_list_s_.find(original_seq);
-      if(it!=nack_list_s_.end()){
-        original_seq=it->second+2;
-        // RTC_LOG(INFO)<<"sandystatsnack the starting seq for secondary = "<<original_seq<<" the ending seq_num_end= "<< 
-        // seq_num_end<<" mp_seq = "<<mp_seq_num<<"\n";
-      }else{
-        return;
-      }
-
-    // RTC_LOG(INFO)<<"sandystatsnack the insertion logic secondary"<<original_seq<<" from pathid ="<<pathid<<" mp_seq: " 
-    //     <<mp_seq_num<<" : "<<mp_seq_num_<<"\n";
-
-    for (uint16_t seq_num = original_seq; seq_num !=seq_num_end;(seq_num+=2)) {//sandy: +1 is for Mp-WebRTC
-        
-        if (recovered_list_.find(seq_num) != recovered_list_.end())
-          continue;
-        RTC_DCHECK(nack_list_.find(seq_num) == nack_list_.end());
-        NackInfo nack_info(seq_num,seq_num + WaitNumberOfPackets(0.5),
-                           clock_->TimeInMilliseconds(),pathid);
-        
-        
-        nack_list_[seq_num] = nack_info;//sandy: Adding to the NACK list
-        RTC_LOG(INFO)<<"sandystatsnackstatsnack insterted into secondary nack list "<<seq_num<<" from pathid ="<< 
-        pathid<<" mp_seq: "<<mp_seq_num<<" : "<<mp_seq_num_<<" nack size is "<<nack_list_.size()<<"\n";
+    while (RemovePacketsUntilKeyFrame() &&
+           nack_list_.size() + num_new_nacks > kMaxNackPackets) {
     }
-  
-  
-}
 
-void NackModule2::InsertPacketNack(uint16_t seq_num_start,uint16_t mp_seq_num,
-                                   uint16_t seq_num_end,int pathid){
-    // RTC_LOG(INFO)<<"sandystatsnack the insertion logic "<<seq_num_end<<" from pathid ="<<pathid<<" mp_seq: " 
-    //     <<mp_seq_num<<" : "<<mp_seq_num_<<"\n";
-    // if(mp_seq_num!=seq_num_end){
-    //   if(pathid!=2)
-    //     InsertPacketNackPrimary(newest_seq_num_p_,mp_seq_num,seq_num_end,pathid);
-    //   else
-    //     InsertPacketNackSecondary(newest_seq_num_s_,mp_seq_num,seq_num_end,pathid);
-    // }
-    for (uint16_t seq_num = seq_num_start; seq_num != seq_num_end; ++seq_num) {//sandy: +1 is for Mp-WebRTC
-        if (recovered_list_.find(seq_num) != recovered_list_.end())
-          continue;
-        NackInfo nack_info(seq_num, seq_num + WaitNumberOfPackets(0.5),
-                           clock_->TimeInMilliseconds(),pathid);
-        RTC_DCHECK(nack_list_.find(seq_num) == nack_list_.end());
-        
-        nack_list_[seq_num] = nack_info;//sandy: Adding to the NACK list
-        RTC_LOG(INFO)<<"sandystatsnack insterted into default nack list "<<seq_num<<" from pathid ="<<pathid<<  
-        " mp_seq "<<mp_seq_num_<<" : "<<mp_seq_num_<<" nack size is "<<nack_list_.size()<<"\n";
-    }
-    
-  }
-
-//sandy: Adding the below function to get the total nack size of each path
-uint64_t NackModule2::GetNackSize(int pathid){
-  uint64_t count=0;
-  auto it = nack_list_.begin();
-  while (it != nack_list_.end()) {
-    if(pathid==it->second.pathid_){
-      count++;
+    if (nack_list_.size() + num_new_nacks > kMaxNackPackets) {
+      nack_list_.clear();
+      RTC_LOG(LS_WARNING) << "NACK list full, clearing NACK"
+                             " list and requesting keyframe.";
+      RTC_LOG(INFO)<<"sandyofo the OFO increasing and buffer is full ";
+      keyframe_request_sender_->RequestKeyFrame();
+      return;
     }
   }
-  return count; 
+
+  for (uint16_t seq_num = seq_num_start; seq_num != seq_num_end; ++seq_num) {
+    // Do not send nack for packets that are already recovered by FEC or RTX
+    if (recovered_list_.find(seq_num) != recovered_list_.end())
+      continue;
+    NackInfo nack_info(seq_num, seq_num + WaitNumberOfPackets(0.5),
+                       clock_->TimeInMilliseconds());
+    RTC_DCHECK(nack_list_.find(seq_num) == nack_list_.end());
+    nack_list_[seq_num] = nack_info;
+  }
 }
-std::vector<uint16_t> NackModule2::GetNackBatch(NackFilterOptions options,int pathid) {
+
+std::vector<uint16_t> NackModule2::GetNackBatch(NackFilterOptions options) {
   // Called on worker_thread_.
 
   bool consider_seq_num = options != kTimeOnly;
   bool consider_timestamp = options != kSeqNumOnly;
   Timestamp now = clock_->CurrentTime();
   std::vector<uint16_t> nack_batch;
-
   auto it = nack_list_.begin();
   while (it != nack_list_.end()) {
     TimeDelta resend_delay = TimeDelta::Millis(rtt_ms_);
@@ -516,20 +310,17 @@ std::vector<uint16_t> NackModule2::GetNackBatch(NackFilterOptions options,int pa
         AheadOrAt(newest_seq_num_, it->second.send_at_seq_num);
     if (delay_timed_out && ((consider_seq_num && nack_on_seq_num_passed) ||
                             (consider_timestamp && nack_on_rtt_passed))) {
-      if(pathid==it->second.pathid_){
-        //RTC_LOG(INFO)<<"sandystatsnack the pathid for the batch prepared is "<<it->second.pathid_<<"\n";
-        nack_batch.emplace_back(it->second.seq_num);
-        ++it->second.retries;
-        it->second.sent_at_time = now.ms();
-        if (it->second.retries >= kMaxNackRetries) {
-          RTC_LOG(LS_WARNING) << "Sequence number " << it->second.seq_num
-                              << " removed from NACK list due to max retries.";
-          it = nack_list_.erase(it);
-        } else {
-          ++it;
-        }
-        continue;
+      nack_batch.emplace_back(it->second.seq_num);
+      ++it->second.retries;
+      it->second.sent_at_time = now.ms();
+      if (it->second.retries >= kMaxNackRetries) {
+        RTC_LOG(LS_WARNING) << "Sequence number " << it->second.seq_num
+                            << " removed from NACK list due to max retries.";
+        it = nack_list_.erase(it);
+      } else {
+        ++it;
       }
+      continue;
     }
     ++it;
   }

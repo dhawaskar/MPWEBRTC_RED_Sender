@@ -163,7 +163,7 @@ class RTPSender {
       RTC_LOCKS_EXCLUDED(send_critsect_);
 
   //sandy: Implementing the traffic split ratio for the MP-WebRTC
-  void MPTrafficSplitImplementation(std::vector<std::unique_ptr<RtpPacketToSend>> packets) 
+  void MPTrafficSplitImplementation(std::vector<std::unique_ptr<RtpPacketToSend>> packets,int framesize,bool keyframe,bool audio)  
   RTC_LOCKS_EXCLUDED(send_critsect_);
 
   // Pass a set of packets to RtpPacketSender instance, for paced or immediate
@@ -223,6 +223,7 @@ class RTPSender {
   uint16_t sequence_number_p_ ;//primary sequence number
   uint16_t sequence_number_s_ ;//secondary sequence number
   uint32_t total_packets_sent=0;
+  uint32_t frames_sent=0;
   uint16_t sequence_number_rtx_ RTC_GUARDED_BY(send_critsect_);
   // RID value to send in the RID or RepairedRID header extension.
   std::string rid_ RTC_GUARDED_BY(send_critsect_);

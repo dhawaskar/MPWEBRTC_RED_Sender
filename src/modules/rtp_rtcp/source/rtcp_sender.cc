@@ -62,6 +62,7 @@ class PacketContainer : public rtcp::CompoundPacket {
   }
 
   size_t SendPackets(size_t max_payload_length,int pathid) {
+    // RTC_DCHECK(pathid>0);
     // RTC_LOG(INFO)<<"sandyrtcp: Sending SendCombinedRtcpPacket for "<<pathid<<"\n";
     size_t bytes_sent = 0;
     Build(max_payload_length, [&](rtc::ArrayView<const uint8_t> packet) {
@@ -103,6 +104,7 @@ class PacketSender {
 
   // Sends pending rtcp packet.
   void Send(int pathid) {
+    RTC_DCHECK(pathid>0);
     // RTC_LOG(INFO)<<"sandyrtcp: Sending SendCombinedRtcpPacket for "<<pathid<<"\n";
     if (index_ > 0) {
       //RTC_LOG(INFO)<<"sandyrtcp before packet sent 2\n";
@@ -475,7 +477,7 @@ bool RTCPSender::TimeToSendRTCPReport(bool sendKeyframeBeforeRTP,int pathid) con
 std::unique_ptr<rtcp::RtcpPacket> RTCPSender::BuildSR(const RtcpContext& ctx,const int pathid) {
 
 
-  //RTC_LOG(INFO)<<"sandyrtt: Building the sending report "<<pathid<<"\n";
+  RTC_LOG(INFO)<<"sandyrtt: Building the sending report "<<pathid<<"\n";
   NtpTime stime;
   // Timestamp shouldn't be estimated before first media frame.
   RTC_DCHECK_GE(last_frame_capture_time_ms_, 0);
@@ -533,7 +535,7 @@ std::unique_ptr<rtcp::RtcpPacket> RTCPSender::BuildSDES(//sandy: sent
 }
 //sandy: Sending the receiver report now.
 std::unique_ptr<rtcp::RtcpPacket> RTCPSender::BuildRR(const RtcpContext& ctx,const int pathid) {
- //RTC_LOG(INFO)<<"sandyrtt : creating the receiver report "<<pathid;
+ RTC_LOG(INFO)<<"sandyrtt : creating the receiver report "<<pathid;
   rtcp::ReceiverReport* report = new rtcp::ReceiverReport();
   report->SetPathId(pathid);//sandy: This is how you set the path
   report->SetSenderSsrc(ssrc_);
@@ -1158,7 +1160,8 @@ absl::optional<VideoBitrateAllocation> RTCPSender::CheckAndUpdateLayerStructure(
 void RTCPSender::SendCombinedRtcpPacket(
     std::vector<std::unique_ptr<rtcp::RtcpPacket>> rtcp_packets,int pathid) {
 
-  // RTC_LOG(INFO)<<"sandyrtcp: Sending SendCombinedRtcpPacket for "<<pathid<<"\n";
+  RTC_LOG(INFO)<<"sandyrtcp: Sending SendCombinedRtcpPacket for "<<pathid<<"\n";
+  RTC_DCHECK(pathid>0);
   size_t max_packet_size;
   uint32_t ssrc;
   {

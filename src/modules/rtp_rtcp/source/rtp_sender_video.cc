@@ -380,7 +380,7 @@ void RTPSenderVideo::AddRtpHeaderExtensions(
     }
   }
 }
-
+//sandy: Videoframe come from video_stream_encoder.cc
 bool RTPSenderVideo::SendVideo(
     int payload_type,
     absl::optional<VideoCodecType> codec_type,
@@ -589,7 +589,10 @@ bool RTPSenderVideo::SendVideo(
         // packet as protected here.
       }
     }
-
+    if (video_header.frame_type == VideoFrameType::kVideoFrameKey){
+      RTC_LOG(INFO)<<"sandysched this is the key frame\n";
+      packet->set_is_key_frame(true);
+    }
     if (red_enabled()) {
       std::unique_ptr<RtpPacketToSend> red_packet(new RtpPacketToSend(*packet));
       BuildRedPayload(*packet, red_packet.get());
@@ -614,6 +617,7 @@ bool RTPSenderVideo::SendVideo(
             << "Sent last RTP packet of the first video frame (pre-pacer)";
       }
     }
+
   }
 
   if (fec_generator_) {

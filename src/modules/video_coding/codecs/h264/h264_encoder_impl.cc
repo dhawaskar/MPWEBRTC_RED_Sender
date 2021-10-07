@@ -248,7 +248,8 @@ int32_t H264EncoderImpl::InitEncode(const VideoCodec* inst,
     configurations_[i].height = codec_.simulcastStream[idx].height;
     configurations_[i].max_frame_rate = static_cast<float>(codec_.maxFramerate);
     configurations_[i].frame_dropping_on = codec_.H264()->frameDroppingOn;
-    configurations_[i].key_frame_interval = codec_.H264()->keyFrameInterval;
+    configurations_[i].key_frame_interval = codec_.H264()->keyFrameInterval;//sandy
+    // configurations_[i].key_frame_interval = 100;
     configurations_[i].num_temporal_layers =
         codec_.simulcastStream[idx].numberOfTemporalLayers;
 
@@ -554,7 +555,8 @@ SEncParamExt H264EncoderImpl::CreateEncoderParams(size_t i) const {
   encoder_params.bEnableFrameSkip = configurations_[i].frame_dropping_on;
   // |uiIntraPeriod|    - multiple of GOP size
   // |keyFrameInterval| - number of frames
-  encoder_params.uiIntraPeriod = configurations_[i].key_frame_interval;
+  encoder_params.uiIntraPeriod = configurations_[i].key_frame_interval;//sandy
+  // encoder_params.uiIntraPeriod = 100;
   encoder_params.uiMaxNalSize = 0;
   // Threading model: use auto.
   //  0: auto (dynamic imp. internal encoder)
@@ -575,7 +577,7 @@ SEncParamExt H264EncoderImpl::CreateEncoderParams(size_t i) const {
     encoder_params.iNumRefFrame = 1;
   }
   RTC_LOG(INFO) << "OpenH264 version is " << OPENH264_MAJOR << "."
-                << OPENH264_MINOR;
+                << OPENH264_MINOR<<" Number of temporal layers "<<encoder_params.iTemporalLayerNum;
   switch (packetization_mode_) {
     case H264PacketizationMode::SingleNalUnit:
       // Limit the size of the packets produced.

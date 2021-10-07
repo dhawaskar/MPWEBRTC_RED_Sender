@@ -1530,6 +1530,9 @@ int P2PTransportChannel::SendPacket(const char* data,
                                     const rtc::PacketOptions& options,
                                     int flags) {
   RTC_DCHECK_RUN_ON(network_thread_);
+  if(options.packet_id<0){
+    RTC_DCHECK(options.packet_id);
+  }
   if (flags != 0) {
     error_ = EINVAL;
     return -1;
@@ -1605,7 +1608,8 @@ int P2PTransportChannel::SendPacket(const char* data,
       RTC_DCHECK(sent < 0);
        error_ = selected_connection_->GetError();
     }
-  }else if(second_connection_ && options.pathid==2){
+  }
+  else if(second_connection_ && options.pathid==2){
       modified_options.pathid=2;
       sent=second_connection_->Send(data, len, modified_options);
       if (sent <= 0) {
@@ -1671,6 +1675,10 @@ void P2PTransportChannel::UpdateConnectionStates() {
   // We need to copy the list of connections since some may delete themselves
   // when we call UpdateState.
   for (Connection* c : connections()) {
+    if(c==second_connection_){//sandy: This removes connection and hence I have removed it myself. When connection is inactive for more time it removes the connection
+      //sandy: In MPwebRTC secondary path can be inacive for long time and hence I disable it
+      continue;
+    }
     c->UpdateState(now);
   }
 }
@@ -1986,6 +1994,7 @@ void P2PTransportChannel::CheckAndPing() {
   RTC_DCHECK_RUN_ON(network_thread_);
   // Make sure the states of the connections are up-to-date (since this affects
   // which ones are pingable).
+  RTC_LOG(INFO)<<"sandyconnection : check and pinging";
   UpdateConnectionStates();
 
   auto result = ice_controller_->SelectConnectionToPing(last_ping_sent_ms_);

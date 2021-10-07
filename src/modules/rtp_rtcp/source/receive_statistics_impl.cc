@@ -25,13 +25,13 @@
 #include "api/mp_global.h"
 
 
-int64_t sequence_number_primary;
+
 uint32_t rtcp_seq_p=0,rtcp_seq_s=0;
 namespace webrtc {
 
 const int64_t kStatisticsTimeoutMs = 8000;
 const int64_t kStatisticsProcessIntervalMs = 1000; //sandy: 1000 original value
-const int32_t kMpGapThreshold=0;//sandy: Since re-ordering is common we will not report loss unless it is >10
+// const int32_t kMpGapThreshold=0;//sandy: Since re-ordering is common we will not report loss unless it is >10
 
 StreamStatistician::~StreamStatistician() {}
 
@@ -48,17 +48,29 @@ StreamStatisticianImpl::StreamStatisticianImpl(uint32_t ssrc,
       jitter_q4_p(0),
       jitter_q4_s(0),
       cumulative_loss_(0),
+      cumulative_loss_primary(0),
+      cumulative_loss_secondary(0),
       cumulative_loss_rtcp_offset_(0),
       cumulative_loss_rtcp_offset_p(0),
       cumulative_loss_rtcp_offset_s(0),
       last_receive_time_ms_(0),
+      last_receive_time_ms_primary(0),
+      last_receive_time_ms_secondary(0),
       last_received_timestamp_(0),
+      last_received_timestamp_primary(0),
+      last_received_timestamp_secondary(0),
       received_seq_first_(-1),
+      received_seq_first_primary(-1),
+      received_seq_first_secondary(-1),
       received_seq_max_(-1),
+      received_seq_max_primary(-1),
+      received_seq_max_secondary(-1),
       last_report_cumulative_loss_(0),
+      last_report_cumulative_loss_primary(0),
+      last_report_cumulative_loss_secondary(0),
       last_report_seq_max_(-1),
-      primary_seq(0),
-      secondary_seq(0)
+      last_report_seq_max_primary(-1),
+      last_report_seq_max_secondary(-1)
        {
         // RTC_LOG(INFO)<<"The max_reordering_threshold\t"<<max_reordering_threshold<<"\n";
         if(!mpcollector_){
@@ -70,10 +82,73 @@ StreamStatisticianImpl::StreamStatisticianImpl(uint32_t ssrc,
 
 StreamStatisticianImpl::~StreamStatisticianImpl() = default;
 
+
+bool StreamStatisticianImpl::MpPrimaryUpdateOutOfOrder(const RtpPacketReceived& packet,
+                                              int64_t sequence_number,
+                                              int64_t now_ms) {
+  if (primary_received_seq_out_of_order_) {
+    --cumulative_loss_primary;
+    uint16_t expected_sequence_number = *primary_received_seq_out_of_order_ + 1;
+    primary_received_seq_out_of_order_ = absl::nullopt;
+    if (packet.subflow_seq == expected_sequence_number) {
+      last_report_seq_max_primary = sequence_number - 2;
+      received_seq_max_primary = sequence_number - 2;
+      return false;
+    }
+  }
+
+  if (std::abs(sequence_number - received_seq_max_primary) >
+      max_reordering_threshold_) {
+    primary_received_seq_out_of_order_ = packet.SequenceNumber();
+    ++cumulative_loss_primary;
+    return true;
+  }
+
+  if (sequence_number > received_seq_max_primary)
+    return false;
+
+  // Old out of order packet, may be retransmit.
+  if (enable_retransmit_detection_ && IsRetransmitOfOldPacket(packet, now_ms))
+    receive_counters_.retransmitted.AddPacket(packet);
+  return true;
+}
+
+//secondary path
+bool StreamStatisticianImpl::MpSecondaryUpdateOutOfOrder(const RtpPacketReceived& packet,
+                                              int64_t sequence_number,
+                                              int64_t now_ms) {
+  if (secondary_received_seq_out_of_order_) {
+    --cumulative_loss_secondary;
+    uint16_t expected_sequence_number = *secondary_received_seq_out_of_order_ + 1;
+    secondary_received_seq_out_of_order_ = absl::nullopt;
+    if (packet.subflow_seq == expected_sequence_number) {
+      last_report_seq_max_secondary = sequence_number - 2;
+      received_seq_max_secondary = sequence_number - 2;
+      return false;
+    }
+  }
+
+  if (std::abs(sequence_number - received_seq_max_secondary) >
+      max_reordering_threshold_) {
+    secondary_received_seq_out_of_order_ = packet.SequenceNumber();
+    ++cumulative_loss_secondary;
+    return true;
+  }
+
+  if (sequence_number > received_seq_max_secondary)
+    return false;
+
+  // Old out of order packet, may be retransmit.
+  if (enable_retransmit_detection_ && IsRetransmitOfOldPacket(packet, now_ms))
+    receive_counters_.retransmitted.AddPacket(packet);
+  return true;
+}
+
+
+
 bool StreamStatisticianImpl::UpdateOutOfOrder(const RtpPacketReceived& packet,
                                               int64_t sequence_number,
                                               int64_t now_ms) {
-  
   // Check if |packet| is second packet of a stream restart.
   if (received_seq_out_of_order_) {
     // Count the previous packet as a received; it was postponed below.
@@ -96,8 +171,6 @@ bool StreamStatisticianImpl::UpdateOutOfOrder(const RtpPacketReceived& packet,
     }
   }
 
-  
-
   if (std::abs(sequence_number - received_seq_max_) >
       max_reordering_threshold_) {
     // Sequence number gap looks too large, wait until next packet to check
@@ -110,7 +183,6 @@ bool StreamStatisticianImpl::UpdateOutOfOrder(const RtpPacketReceived& packet,
     // |cumulative_loss_| to be unchanged by the reception of the first packet
     // after stream reset.
     ++cumulative_loss_;
-    // RTC_LOG(INFO)<<"seqsandy: Received out of order\n";
     return true;
   }
 
@@ -118,10 +190,8 @@ bool StreamStatisticianImpl::UpdateOutOfOrder(const RtpPacketReceived& packet,
     return false;
 
   // Old out of order packet, may be retransmit.
-  if (enable_retransmit_detection_ && IsRetransmitOfOldPacket(packet, now_ms)){
+  if (enable_retransmit_detection_ && IsRetransmitOfOldPacket(packet, now_ms))
     receive_counters_.retransmitted.AddPacket(packet);
-    // RTC_LOG(INFO)<<"seqsandy: Received duplicate packet\n";
-  }
   return true;
 }
 
@@ -146,84 +216,68 @@ void StreamStatisticianImpl::UpdateCounters(const RtpPacketReceived& packet) {
   int64_t sequence_number =
       seq_unwrapper_.UnwrapWithoutUpdate(packet.SequenceNumber());
 
-
-  
-  if(packet.subflow_id!=2){
-    primary_seq=seq_unwrapper_.UnwrapWithoutUpdate(packet.subflow_seq);
-    if(prev_primary_seq==0 && primary_seq>0){
-      prev_primary_seq=seq_unwrapper_.UnwrapWithoutUpdate(packet.subflow_seq);
-    }
-  }else{
-    secondary_seq=seq_unwrapper_.UnwrapWithoutUpdate(packet.subflow_seq);
-    if(prev_secondary_seq==0 && secondary_seq >0){
-      prev_secondary_seq=seq_unwrapper_.UnwrapWithoutUpdate(secondary_seq);
-    }
-  }
-  //sandy
-  if(packet.subflow_id==1){
-    if(primary_seq>0 && prev_primary_seq >0 &&  primary_seq>prev_primary_seq){  
-        if(received_seq_first_primary<0)
-          received_seq_first_primary=primary_seq;
-        if((primary_seq-prev_primary_seq-1)>kMpGapThreshold)
-          cumulative_loss_primary+=(primary_seq-prev_primary_seq-1);
-    }
-    // RTC_LOG(INFO)<<"cumulative_loss_primary: "<<cumulative_loss_primary<<" seq "<< primary_seq <<" prev "<< prev_primary_seq<<"\t"<<sequence_number<<"\t"<<cumulative_loss_<<"\n";
-    received_seq_max_primary=primary_seq;
-    p_packets++;
-    if(primary_seq>prev_primary_seq)
-      prev_primary_seq=primary_seq;
-    // else if(primary_seq<prev_primary_seq)
-    //   prev_primary_seq++;
-    //Jitter computation
-  }
-  else{
-    if(secondary_seq>0 && prev_secondary_seq >0 && secondary_seq>prev_secondary_seq) { 
-        if(received_seq_first_secondary<0)
-          received_seq_first_secondary=secondary_seq;
-        if((secondary_seq-prev_secondary_seq-1)>kMpGapThreshold)
-        cumulative_loss_secondary+=(secondary_seq-prev_secondary_seq-1);
-    }
-    // RTC_LOG(INFO)<<"cumulative_loss_secondary: "<<cumulative_loss_secondary<<" seq "<< secondary_seq <<" prev "<< prev_secondary_seq<<"\t"<<sequence_number<<"\n";
-    received_seq_max_secondary=secondary_seq;
-    s_packets++;
-    if(secondary_seq>prev_secondary_seq)
-      prev_secondary_seq=secondary_seq;
-    // else if(secondary_seq<prev_secondary_seq)
-    //   prev_secondary_seq++;
-  }
-  
   if (!ReceivedRtpPacket()) {
     received_seq_first_ = sequence_number;
     last_report_seq_max_ = sequence_number - 1;
     received_seq_max_ = sequence_number - 1;
     receive_counters_.first_packet_time_ms = now_ms;
-  } else if (UpdateOutOfOrder(packet, sequence_number, now_ms)) {
-    return;
+  } else {
+    UpdateOutOfOrder(packet, sequence_number, now_ms);
+    // return;//sandy: Control will go and exit in below either path1 or path2
+  }
+  if(packet.subflow_id!=2){
+    --cumulative_loss_primary;
+    int64_t primary_seq=seq_unwrapper_.UnwrapWithoutUpdate(packet.subflow_seq);
+    if (!MpPrimaryReceivedRtpPacket()) {
+      received_seq_first_primary = primary_seq;
+      last_report_seq_max_primary = primary_seq - 1;
+      received_seq_max_primary = primary_seq - 1;
+      receive_counters_.first_packet_time_ms = now_ms;
+    } else if (MpPrimaryUpdateOutOfOrder(packet, primary_seq, now_ms)) {
+      return;
+    }
+    cumulative_loss_primary +=primary_seq - received_seq_max_primary;
+    received_seq_max_primary = primary_seq;
+  }else{
+    --cumulative_loss_secondary;
+    int64_t secondary_seq=seq_unwrapper_.UnwrapWithoutUpdate(packet.subflow_seq);
+    if (!MpSecondaryReceivedRtpPacket()) {
+      received_seq_first_secondary = secondary_seq;
+      last_report_seq_max_secondary = secondary_seq - 1;
+      received_seq_max_secondary = secondary_seq - 1;
+      receive_counters_.first_packet_time_ms = now_ms;
+    } else if (MpSecondaryUpdateOutOfOrder(packet, secondary_seq, now_ms)) {
+      return;
+    }
+    cumulative_loss_secondary +=secondary_seq - received_seq_max_secondary;
+    received_seq_max_secondary = secondary_seq;
   }
   
-
+  
   // In order packet.
   cumulative_loss_ += sequence_number - received_seq_max_;
   received_seq_max_ = sequence_number;
 
   seq_unwrapper_.UpdateLast(sequence_number);
 
+  
+
   // If new time stamp and more than one in-order packet received, calculate
   // new jitter statistics.
 
 
   //if(packet.subflow_id==1|| packet.subflow_id!=2){
-  if (packet.subflow_id==1 && packet.Timestamp() != last_received_timestamp_p){
+  if (packet.subflow_id==1 && packet.Timestamp() != last_received_timestamp_primary){
     UpdateJitter_p(packet, now_ms);
-    last_received_timestamp_p = packet.Timestamp();
-    last_receive_time_ms_p = now_ms;
+    last_received_timestamp_primary = packet.Timestamp();
+    last_receive_time_ms_primary = now_ms;
   }
   
 
-  if (packet.subflow_id==2 && packet.Timestamp() != last_received_timestamp_s){
+  if (packet.subflow_id==2 && packet.Timestamp() != last_received_timestamp_secondary){
     UpdateJitter_s(packet, now_ms);
-    last_received_timestamp_s = packet.Timestamp();
-    last_receive_time_ms_s = now_ms;
+    last_received_timestamp_secondary = packet.Timestamp();
+    last_receive_time_ms_secondary = now_ms;
   }
   
 
@@ -237,17 +291,17 @@ void StreamStatisticianImpl::UpdateCounters(const RtpPacketReceived& packet) {
 
   
 
-  // RTC_LOG(INFO)<<"sandyjitter: The original primary and secondary "<<jitter_q4_<<" "<<jitter_q4_p<<" "<<(jitter_q4_s>>4)<<"\n";
+  RTC_LOG(INFO)<<"sandyloss: The original : primary "<<cumulative_loss_<<" : "<<cumulative_loss_primary<<"\n";
 }
 void StreamStatisticianImpl::UpdateJitter_p(const RtpPacketReceived& packet,
                                           int64_t receive_time_ms) {
-  int64_t receive_diff_ms = receive_time_ms - last_receive_time_ms_p;
+  int64_t receive_diff_ms = receive_time_ms - last_receive_time_ms_primary;
   // RTC_LOG(INFO)<<"Last receive time\t"<<receive_time_ms<<":"<<last_receive_time_ms_p<<":"<<packet.Timestamp()<<":"<<last_received_timestamp_p<<"\n";
   RTC_DCHECK_GE(receive_diff_ms, 0);
   uint32_t receive_diff_rtp = static_cast<uint32_t>(
       (receive_diff_ms * packet.payload_type_frequency()) / 1000);
   int32_t time_diff_samples =
-      receive_diff_rtp - (packet.Timestamp() - last_received_timestamp_p);
+      receive_diff_rtp - (packet.Timestamp() - last_received_timestamp_primary);
 
   time_diff_samples = std::abs(time_diff_samples);
 
@@ -262,12 +316,12 @@ void StreamStatisticianImpl::UpdateJitter_p(const RtpPacketReceived& packet,
 }
 void StreamStatisticianImpl::UpdateJitter_s(const RtpPacketReceived& packet,
                                           int64_t receive_time_ms) {
-  int64_t receive_diff_ms = receive_time_ms - last_receive_time_ms_s;
+  int64_t receive_diff_ms = receive_time_ms - last_receive_time_ms_secondary;
   RTC_DCHECK_GE(receive_diff_ms, 0);
   uint32_t receive_diff_rtp = static_cast<uint32_t>(
       (receive_diff_ms * packet.payload_type_frequency()) / 1000);
   int32_t time_diff_samples =
-      receive_diff_rtp - (packet.Timestamp() - last_received_timestamp_s);
+      receive_diff_rtp - (packet.Timestamp() - last_received_timestamp_secondary);
 
   time_diff_samples = std::abs(time_diff_samples);
 
@@ -331,7 +385,7 @@ RtpReceiveStats StreamStatisticianImpl::GetStats() const {//sandy: yet to implem
 bool StreamStatisticianImpl::GetActiveStatisticsAndReset(
     RtcpStatistics* statistics,int pathid) {
   rtc::CritScope cs(&stream_lock_);
-  RtcpStatistics statistics_original;
+  // RtcpStatistics statistics_original;
   if (clock_->TimeInMilliseconds() - last_receive_time_ms_ >=
       kStatisticsTimeoutMs) {
     // Not active.
@@ -342,16 +396,8 @@ bool StreamStatisticianImpl::GetActiveStatisticsAndReset(
   }  
   if(pathid==1) {
     *statistics =MpPrimaryCalculateRtcpStatistics();
-    statistics_original=CalculateRtcpStatistics();
-    statistics->extended_highest_sequence_number=statistics_original.extended_highest_sequence_number;
-    // RTC_LOG(INFO)<<"sandy sending the extended_highest_sequence_number original setting for primary "<< 
-    //     statistics->extended_highest_sequence_number<<"\n";
   }else if(pathid==2 && mpcollector_->MpISsecondPathOpen() && !(( mpcollector_->MpGetScheduler().find("red")!=std::string::npos))){
     *statistics =MpSecondaryCalculateRtcpStatistics();
-    statistics_original=CalculateRtcpStatistics();
-    statistics->extended_highest_sequence_number=statistics_original.extended_highest_sequence_number;
-    RTC_LOG(INFO)<<"sandyred sending the extended_highest_sequence_number original setting for secondary "<< 
-        statistics->extended_highest_sequence_number<<"\n";
   }else{
     *statistics = CalculateRtcpStatistics();
   }
@@ -364,177 +410,117 @@ bool StreamStatisticianImpl::GetActiveStatisticsAndReset(
 }
 
 RtcpStatistics StreamStatisticianImpl::MpPrimaryCalculateRtcpStatistics() {
+
+
   RtcpStatistics stats;
-  int64_t exp_primary_since_last=0;
-  exp_primary_since_last=received_seq_max_primary- received_seq_max_primary_last;
-  if(exp_primary_since_last<0){
-    exp_primary_since_last=0;//sandy Fix this bug
+  // Calculate fraction lost.
+  int64_t exp_since_last = received_seq_max_primary - last_report_seq_max_primary;
+  RTC_DCHECK_GE(exp_since_last, 0);
+
+  int32_t lost_since_last = cumulative_loss_primary - last_report_cumulative_loss_primary;
+  if (exp_since_last > 0 && lost_since_last > 0) {
+    // Scale 0 to 255, where 255 is 100% loss.
+    stats.subflowfractionlost_p =
+        static_cast<uint8_t>(255 * lost_since_last / exp_since_last);
+  } else {
+    stats.subflowfractionlost_p = 0;
   }
-  RTC_DCHECK_GE(exp_primary_since_last, 0);
-  //RTC_LOG(INFO)<<"Mpsandypackets "<<received_seq_max_primary<<" "<<received_seq_max_primary_last<<" "<<p_packets<<" "<< exp_since_last;
-  p_packets=0;
-  int primary_fraction_lost=0;
-  int32_t primary_lost_since_last;
-  primary_lost_since_last= cumulative_loss_primary- cumulative_loss_primary_last;
-  if(exp_primary_since_last >0 && primary_lost_since_last >0){
-    primary_fraction_lost=(255 * primary_lost_since_last / exp_primary_since_last);
-  }else{
-    primary_fraction_lost=0;
-  }
-  if(primary_lost_since_last>kMpGapThreshold)//sandy: If loss is greater than 10 packets: RTP packets come here are ordered so no need to keep this thershold
-  //if(primary_lost_since_last>0)//sandy: If loss is greater than 10 packets  
-    stats.packets_lost_p=cumulative_loss_primary+cumulative_loss_rtcp_offset_p;
-  else
-    stats.packets_lost_p=0;
+
+  // TODO(danilchap): Ensure |stats.packets_lost| is clamped to fit in a signed
+  // 24-bit value.
+  stats.packets_lost_p = cumulative_loss_primary + cumulative_loss_rtcp_offset_p;
   if (stats.packets_lost_p < 0) {
     // Clamp to zero. Work around to accomodate for senders that misbehave with
     // negative cumulative loss.
     stats.packets_lost_p = 0;
     cumulative_loss_rtcp_offset_p = -cumulative_loss_primary;
   }
+  stats.extended_highest_sequence_number_p =
+      static_cast<uint32_t>(received_seq_max_primary);
+  // Note: internal jitter value is in Q4 and needs to be scaled by 1/16.
   stats.jitter_p = jitter_q4_p >> 4;
-  received_seq_max_primary_last=received_seq_max_primary;
-  cumulative_loss_primary_last=cumulative_loss_primary;
-  stats.subflowfractionlost_p=primary_fraction_lost;
-  stats.extended_highest_sequence_number_p=static_cast<uint32_t>(received_seq_max_primary);
-  return stats;
+  stats.extended_highest_sequence_number =
+      static_cast<uint32_t>(received_seq_max_);
+  // Only for report blocks in RTCP SR and RR.
+  last_report_cumulative_loss_primary = cumulative_loss_primary;
+  last_report_seq_max_primary = received_seq_max_primary;
+
+  return stats;  
 }
 
 
 RtcpStatistics StreamStatisticianImpl::MpSecondaryCalculateRtcpStatistics() {
   RtcpStatistics stats;
-  int64_t exp_secondary_since_last=0; 
-  exp_secondary_since_last=received_seq_max_secondary- received_seq_max_secondary_last;
-  if(exp_secondary_since_last<0){
-    exp_secondary_since_last=0;
+  // Calculate fraction lost.
+  int64_t exp_since_last = received_seq_max_secondary - last_report_seq_max_secondary;
+  RTC_DCHECK_GE(exp_since_last, 0);
+
+  int32_t lost_since_last = cumulative_loss_secondary - last_report_cumulative_loss_secondary;
+  if (exp_since_last > 0 && lost_since_last > 0) {
+    // Scale 0 to 255, where 255 is 100% loss.
+    stats.subflowfractionlost_s =
+        static_cast<uint8_t>(255 * lost_since_last / exp_since_last);
+  } else {
+    stats.subflowfractionlost_s = 0;
   }
-  RTC_DCHECK_GE(exp_secondary_since_last, 0);
-  s_packets=0;
-  int secondary_fraction_lost=0;
-  int32_t secondary_lost_since_last;
-  secondary_lost_since_last= cumulative_loss_secondary- cumulative_loss_secondary_last;
-  if(exp_secondary_since_last >0 && secondary_lost_since_last >0){
-    secondary_fraction_lost=(255 * secondary_lost_since_last / exp_secondary_since_last);
-  }else{
-    secondary_fraction_lost=0;
-  }
-  if(secondary_lost_since_last>kMpGapThreshold)//sandy: If loss is greater than 10 packets
-  // if(secondary_lost_since_last>0)//sandy: If loss is greater than 10 packets
-    stats.packets_lost_s=cumulative_loss_secondary+cumulative_loss_rtcp_offset_s;
-  else
-    stats.packets_lost_s=0;
+
+  // TODO(danilchap): Ensure |stats.packets_lost| is clamped to fit in a signed
+  // 24-bit value.
+  stats.packets_lost_s = cumulative_loss_secondary + cumulative_loss_rtcp_offset_s;
   if (stats.packets_lost_s < 0) {
     // Clamp to zero. Work around to accomodate for senders that misbehave with
     // negative cumulative loss.
     stats.packets_lost_s = 0;
     cumulative_loss_rtcp_offset_s = -cumulative_loss_secondary;
   }
+  stats.extended_highest_sequence_number_s =
+      static_cast<uint32_t>(received_seq_max_secondary);
+  // Note: internal jitter value is in Q4 and needs to be scaled by 1/16.
   stats.jitter_s = jitter_q4_s >> 4;
-  received_seq_max_secondary_last=received_seq_max_secondary;
-  cumulative_loss_secondary_last=cumulative_loss_secondary;
-  stats.subflowfractionlost_s=secondary_fraction_lost;
-  stats.extended_highest_sequence_number_s=static_cast<uint32_t>(received_seq_max_secondary);
-  return stats;
+  stats.extended_highest_sequence_number =
+      static_cast<uint32_t>(received_seq_max_);
+  // Only for report blocks in RTCP SR and RR.
+  last_report_cumulative_loss_secondary = cumulative_loss_secondary;
+  last_report_seq_max_secondary = received_seq_max_secondary;
+
+  return stats;  
 }
 
 //sandy: computing the loss rate
 RtcpStatistics StreamStatisticianImpl::CalculateRtcpStatistics() {
 
-  //RTC_LOG(INFO)<<"calculating RTCP stats\n";  
   RtcpStatistics stats;
-  // Calculate fraction lost.
   int64_t exp_since_last = received_seq_max_ - last_report_seq_max_;
   RTC_DCHECK_GE(exp_since_last, 0);
   
-  // int64_t exp_primary_since_last=0;
-  // exp_primary_since_last=received_seq_max_primary- received_seq_max_primary_last;
-  // RTC_LOG(INFO)<<"Mpsandypackets "<<received_seq_max_primary<<" "<<received_seq_max_primary_last<<" "<<p_packets<<" "<< exp_since_last;
-  // p_packets=0;
-
-  // int64_t exp_secondary_since_last=0; 
-  // exp_secondary_since_last=received_seq_max_secondary- received_seq_max_secondary_last;
-  // s_packets=0;
-  
   int32_t lost_since_last = cumulative_loss_ - last_report_cumulative_loss_;
   if (exp_since_last > 0 && lost_since_last > 0) {
-    // Scale 0 to 255, where 255 is 100% loss.
     stats.fraction_lost =
         static_cast<uint8_t>(255 * lost_since_last / exp_since_last);
   } else {
     stats.fraction_lost = 0;
   }
-  //sandy:
-  // int primary_fraction_lost=0;
-  // int secondary_fraction_lost=0;
-  // int32_t primary_lost_since_last;
-  // primary_lost_since_last= cumulative_loss_primary- cumulative_loss_primary_last;
-  
-  // int32_t secondary_lost_since_last;
-  // secondary_lost_since_last= cumulative_loss_secondary- cumulative_loss_secondary_last;
-  
-  // if(exp_primary_since_last >0 && primary_lost_since_last >0){
-  //   primary_fraction_lost=(255 * primary_lost_since_last / exp_primary_since_last);
-  // }else{
-  //   primary_fraction_lost=0;
-  // }
-  // if(exp_secondary_since_last >0 && secondary_lost_since_last >0){
-  //   secondary_fraction_lost=(255 * secondary_lost_since_last / exp_secondary_since_last);
-  // }else{
-  //   secondary_fraction_lost=0;
-  // }
-  // RTC_LOG(INFO)<<"mploss fraction lost from code\t"<<stats.fraction_lost<<" from lost from sandy primary\t"<<primary_fraction_lost<<" from sandy secondary\t"<<secondary_fraction_lost<<"\t" 
-  // <<"Total packets on primary "<<exp_primary_since_last<<" count "<<p_packets<<" total packets on secondary "<<exp_secondary_since_last<<" count "<<s_packets<<"\n"; 
-  //RTC_LOG(INFO)<<"mploss code: sandy expected_packets time "<<clock_->TimeInMilliseconds()<<" "<<exp_since_last<<" : "<<exp_primary_since_last<<" lost since last "<<lost_since_last<< 
-  // " : "<<primary_lost_since_last<<" loss "<<stats.fraction_lost<<" : "<<primary_fraction_lost<<"\n";
-  //RTC_LOG(INFO)<<"mploss code: sandy expected_packets time "<<clock_->TimeInMilliseconds()<<" : "<<stats.fraction_lost<<" : "<<primary_fraction_lost<<" : "<<secondary_fraction_lost<<"\n";
-  // TODO(danilchap): Ensure |stats.packets_lost| is clamped to fit in a signed
-  // 24-bit value.
   stats.packets_lost = cumulative_loss_ + cumulative_loss_rtcp_offset_;
-  // stats.packets_lost_p=cumulative_loss_primary+cumulative_loss_rtcp_offset_p;
-  // stats.packets_lost_s=cumulative_loss_secondary+cumulative_loss_rtcp_offset_s;
-  // stats.packets_lost_p=100;
-  // stats.packets_lost_s=200;
   if (stats.packets_lost < 0) {
-    // Clamp to zero. Work around to accomodate for senders that misbehave with
-    // negative cumulative loss.
     stats.packets_lost = 0;
     cumulative_loss_rtcp_offset_ = -cumulative_loss_;
   }
-  // if (stats.packets_lost_p < 0) {
-  //   // Clamp to zero. Work around to accomodate for senders that misbehave with
-  //   // negative cumulative loss.
-  //   stats.packets_lost_p = 0;
-  //   cumulative_loss_rtcp_offset_p = -cumulative_loss_primary;
-  // }
-  // if (stats.packets_lost_s < 0) {
-  //   // Clamp to zero. Work around to accomodate for senders that misbehave with
-  //   // negative cumulative loss.
-  //   stats.packets_lost_s = 0;
-  //   cumulative_loss_rtcp_offset_s = -cumulative_loss_secondary;
-  // }
-
   stats.extended_highest_sequence_number =
       static_cast<uint32_t>(received_seq_max_);
 
-  // RTC_LOG(INFO)<<"sandy sending the extended_highest_sequence_number original "<< 
-  //       stats.extended_highest_sequence_number<<"\n";
-  // Note: internal jitter value is in Q4 and needs to be scaled by 1/16.
-  stats.jitter = jitter_q4_ >> 4;
-  // stats.jitter_p = jitter_q4_p >> 4;
-  // stats.jitter_s = jitter_q4_s >> 4;
-
-  // Only for report blocks in RTCP SR and RR.
-  last_report_cumulative_loss_ = cumulative_loss_;
-  last_report_seq_max_ = received_seq_max_;
+ stats.jitter = jitter_q4_ >> 4;
+ last_report_cumulative_loss_ = cumulative_loss_;
+ last_report_seq_max_ = received_seq_max_;
   BWE_TEST_LOGGING_PLOT_WITH_SSRC(1, "cumulative_loss_pkts",
                                   clock_->TimeInMilliseconds(),
                                   cumulative_loss_, ssrc_);
   BWE_TEST_LOGGING_PLOT_WITH_SSRC(
       1, "received_seq_max_pkts", clock_->TimeInMilliseconds(),
-      (received_seq_max_ - received_seq_first_), ssrc_);
-  
+      (received_seq_max_ - received_seq_first_), ssrc_); 
   return stats;
 }
+
+
 //sandy: yet to implement
 absl::optional<int> StreamStatisticianImpl::GetFractionLostInPercent() const {
   rtc::CritScope cs(&stream_lock_);

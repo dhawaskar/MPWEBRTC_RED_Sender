@@ -10,7 +10,7 @@
 #include "modules/congestion_controller/rtp/transport_feedback_demuxer.h"
 #include "absl/algorithm/container.h"
 #include "modules/rtp_rtcp/source/rtcp_packet/transport_feedback.h"
-
+#include "rtc_base/logging.h"
 namespace webrtc {
 namespace {
 static const size_t kMaxPacketsInHistory = 5000;
@@ -46,6 +46,7 @@ void TransportFeedbackDemuxer::AddPacket(const RtpPacketSendInfo& packet_info) {
     StreamFeedbackObserver::StreamPacketInfo info;
     info.ssrc = packet_info.ssrc;
     info.rtp_sequence_number = packet_info.rtp_sequence_number;//sandy: Keep meta sequence number
+    info.mp_rtp_sequence_number=packet_info.mp_rtp_sequence_number;
     info.received = false;
     if(pathid!=2){
       history_.insert(
@@ -68,6 +69,8 @@ void TransportFeedbackDemuxer::AddPacket(const RtpPacketSendInfo& packet_info) {
 
 void TransportFeedbackDemuxer::OnTransportFeedback(
     const rtcp::TransportFeedback& feedback,int pathid) {
+
+  
   std::vector<StreamFeedbackObserver::StreamPacketInfo> stream_feedbacks;
   {
     rtc::CritScope cs(&lock_);

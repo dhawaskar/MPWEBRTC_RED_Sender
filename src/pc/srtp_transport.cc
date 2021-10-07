@@ -179,6 +179,8 @@ bool SrtpTransport::SendRtpPacket(rtc::CopyOnWriteBuffer* packet,
 bool SrtpTransport::SendRtcpPacket(rtc::CopyOnWriteBuffer* packet,
                                    const rtc::PacketOptions& options,
                                    int flags) {
+  RTC_DCHECK(options.pathid>0);
+  RTC_LOG(INFO)<<"sandyrtt sening RTCP packet path "<<options.pathid;
   if (!IsSrtpActive()) {
     RTC_LOG(LS_ERROR)
         << "Failed to send the packet because SRTP transport is inactive.";

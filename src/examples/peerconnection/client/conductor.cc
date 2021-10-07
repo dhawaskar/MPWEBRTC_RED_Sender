@@ -73,11 +73,11 @@ class CapturerTrackSource : public webrtc::VideoTrackSource {
   static rtc::scoped_refptr<CapturerTrackSource> Create() {
     // const size_t kWidth = 4096;//1920
     // const size_t kHeight = 2160;//1080
-    // const size_t kWidth = 1920;//1920
-    // const size_t kHeight = 1080;//1080
-    const size_t kWidth = 640;//2048;//1920
-    const size_t kHeight = 480;//;//1080
-    const size_t kFps = 30;
+    const size_t kWidth = 1920;//1920
+    const size_t kHeight = 1080;//1080
+    // const size_t kWidth = 640;//2048;//1920
+    // const size_t kHeight = 480;//;//1080
+    const size_t kFps = 60;
     std::unique_ptr<webrtc::test::VcmCapturer> capturer;
     std::unique_ptr<webrtc::VideoCaptureModule::DeviceInfo> info(
         webrtc::VideoCaptureFactory::CreateDeviceInfo());
@@ -426,9 +426,22 @@ void Conductor::ConnectToPeer(int peer_id) {
     return;
   }
 
-  if (InitializePeerConnection()) {
+  /*if (InitializePeerConnection()) {
     peer_id_ = peer_id;
     peer_connection_->CreateOffer(
+        this, webrtc::PeerConnectionInterface::RTCOfferAnswerOptions());
+  } else {
+    main_wnd_->MessageBox("Error", "Failed to initialize PeerConnection", true);
+  }*/
+  if (InitializePeerConnection()) {
+    // using RTCOfferAnswerOptions =  webrtc::PeerConnectionInterface::RTCOfferAnswerOptions;
+    // RTCOfferAnswerOptions sandy_options;
+    // sandy_options.offer_to_receive_video=0;
+    // sandy_options.offer_to_receive_audio=0;
+    // sandy_options.raw_packetization_for_video=true;
+    peer_id_ = peer_id;
+    peer_connection_->CreateOffer(
+        // this, sandy_options);//sandy: Adding options to turn off video and audio
         this, webrtc::PeerConnectionInterface::RTCOfferAnswerOptions());
   } else {
     main_wnd_->MessageBox("Error", "Failed to initialize PeerConnection", true);
@@ -440,15 +453,15 @@ void Conductor::AddTracks() {
     return;  // Already added tracks.
   }
 
-  /*rtc::scoped_refptr<webrtc::AudioTrackInterface> audio_track(
-      peer_connection_factory_->CreateAudioTrack(
-          kAudioLabel, peer_connection_factory_->CreateAudioSource(
-                           cricket::AudioOptions())));
-  auto result_or_error = peer_connection_->AddTrack(audio_track, {kStreamId});
-  if (!result_or_error.ok()) {
-    RTC_LOG(LS_ERROR) << "Failed to add audio track to PeerConnection: "
-                      << result_or_error.error().message();
-  }*/
+  // rtc::scoped_refptr<webrtc::AudioTrackInterface> audio_track(
+  //     peer_connection_factory_->CreateAudioTrack(
+  //         kAudioLabel, peer_connection_factory_->CreateAudioSource(
+  //                          cricket::AudioOptions())));
+  // auto result_or_error = peer_connection_->AddTrack(audio_track, {kStreamId});
+  // if (!result_or_error.ok()) {
+  //   RTC_LOG(LS_ERROR) << "Failed to add audio track to PeerConnection: "
+  //                     << result_or_error.error().message();
+  // }
 
   rtc::scoped_refptr<CapturerTrackSource> video_device =
       CapturerTrackSource::Create();

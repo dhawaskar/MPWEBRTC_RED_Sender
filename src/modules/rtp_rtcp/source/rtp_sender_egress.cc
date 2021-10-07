@@ -272,6 +272,7 @@ void RtpSenderEgress::SendPacket(RtpPacketToSend* packet,
     UpdateRtpStats(*packet);
     media_has_been_sent_ = true;
   }
+  RTC_LOG(INFO)<<"sandyofo sent the packet on path "<<packet->subflow_id<< "seq: "<<packet->SequenceNumber();
 }
 
 void RtpSenderEgress::ProcessBitrateAndNotifyObservers() {//sandy: called in rtp_rtcp_impl2.cc
@@ -420,7 +421,6 @@ void RtpSenderEgress::AddPacketToTransportFeedback(
     packet_info.mp_rtp_sequence_number=packet.subflow_seq;//sandy
     //sandy: For the redudnat scheuler both paths should be notified
     if(( mpcollector_->MpGetScheduler().find("red")!=std::string::npos) && mpcollector_->MpISsecondPathOpen()){
-      packet_info.pathid=1;
       packet_info.pathid=1;
       transport_feedback_observer_->OnAddPacket(packet_info);
       // packet_info.pathid=2;

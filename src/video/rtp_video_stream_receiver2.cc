@@ -45,6 +45,8 @@
 #include "rtc_base/checks.h"
 #include "rtc_base/location.h"
 #include "rtc_base/logging.h"
+#include "rtc_base/experiments/struct_parameters_parser.h"
+#include "rtc_base/numerics/safe_minmax.h"
 #include "rtc_base/strings/string_builder.h"
 #include "system_wrappers/include/field_trial.h"
 #include "system_wrappers/include/metrics.h"
@@ -57,8 +59,8 @@ namespace {
 // TODO(philipel): Change kPacketBufferStartSize back to 32 in M63 see:
 //                 crbug.com/752886
 constexpr int kPacketBufferStartSize = 512;
-constexpr int kPacketBufferMaxSize = 2048;
-
+constexpr int kPacketBufferMaxSize = 1024;//2048
+// int64_t sandy_key_request=0;
 int PacketBufferMaxSize() {
   // The group here must be a positive power of 2, in which case that is used as
   // size. All other values shall result in the default value being used.
@@ -108,12 +110,12 @@ std::unique_ptr<NackModule2> MaybeConstructNackModule(
     const VideoReceiveStream::Config& config,
     Clock* clock,
     NackSender* nack_sender,
-    KeyFrameRequestSender* keyframe_request_sender) {
+    KeyFrameRequestSender* keyframe_request_sender,int pathid) {
   if (config.rtp.nack.rtp_history_ms == 0)
     return nullptr;
 
   return std::make_unique<NackModule2>(current_queue, clock, nack_sender,
-                                       keyframe_request_sender);
+                                       keyframe_request_sender,TimeDelta::Millis(20),pathid);
 }
 
 static const int kPacketLogIntervalMs = 10000;
@@ -134,6 +136,7 @@ RtpVideoStreamReceiver2::RtcpFeedbackBuffer::RtcpFeedbackBuffer(
 }
 
 void RtpVideoStreamReceiver2::RtcpFeedbackBuffer::RequestKeyFrame() {
+  RTC_LOG(INFO)<<"sandyofo the OFO increasing and buffer is full ";
   RTC_DCHECK_RUN_ON(&worker_task_checker_);
   request_key_frame_ = true;
 }
@@ -199,6 +202,7 @@ void RtpVideoStreamReceiver2::RtcpFeedbackBuffer::SendBufferedRtcpFeedback() {
   }
 
   if (request_key_frame) {
+    RTC_LOG(INFO)<<"sandyofo the OFO increasing and buffer is full ";
     key_frame_request_sender_->RequestKeyFrame();
   } 
   else{ 
@@ -255,12 +259,12 @@ RtpVideoStreamReceiver2::RtpVideoStreamReceiver2(
                                             config_,
                                             clock_,
                                             &rtcp_feedback_buffer_,
-                                            &rtcp_feedback_buffer_)),
+                                            &rtcp_feedback_buffer_,1)),
       nack_module_s_(MaybeConstructNackModule(current_queue,
                                             config_,
                                             clock_,
                                             &rtcp_feedback_buffer_,
-                                            &rtcp_feedback_buffer_)),
+                                            &rtcp_feedback_buffer_,2)),
       packet_buffer_(clock_, kPacketBufferStartSize, PacketBufferMaxSize()),
       has_received_frame_(false),
       frames_decryptable_(false),
@@ -579,8 +583,7 @@ void RtpVideoStreamReceiver2::OnReceivedPayloadData(
     //RTC_DCHECK(rtp_packet.subflow_id>0 && rtp_packet.subflow_seq>0);
     // RTC_LOG(INFO)<<"sandystats the packet path= "<<rtp_packet.subflow_id<<" seq= "<<rtp_packet.SequenceNumber()<< 
     // " mp seq= "<<rtp_packet.subflow_seq;
-    packet->times_nacked = nack_module_->OnReceivedPacket(
-        rtp_packet.SequenceNumber(), header.extension.mpflowseqnum,is_keyframe, rtp_packet.recovered(),pathid);
+    packet->times_nacked = nack_module_->OnReceivedPacket(header.extension.mpflowseqnum,is_keyframe, rtp_packet.recovered(),pathid);
 
   } else if(nack_module_s_ && pathid==2){
     const bool is_keyframe =
@@ -590,8 +593,7 @@ void RtpVideoStreamReceiver2::OnReceivedPayloadData(
     //RTC_DCHECK(rtp_packet.subflow_id>0 && rtp_packet.subflow_seq>0);
     // RTC_LOG(INFO)<<"sandystats the packet path= "<<rtp_packet.subflow_id<<" seq= "<<rtp_packet.SequenceNumber()<< 
     // " mp seq= "<<rtp_packet.subflow_seq;
-    packet->times_nacked = nack_module_s_->OnReceivedPacket(
-        rtp_packet.SequenceNumber(), header.extension.mpflowseqnum,is_keyframe, rtp_packet.recovered(),pathid);
+    packet->times_nacked = nack_module_s_->OnReceivedPacket(header.extension.mpflowseqnum,is_keyframe, rtp_packet.recovered(),pathid);
   }
   else {
     packet->times_nacked = -1;
@@ -620,6 +622,7 @@ void RtpVideoStreamReceiver2::OnReceivedPayloadData(
 
     switch (fixed.action) {
       case video_coding::H264SpsPpsTracker::kRequestKeyframe:
+        RTC_LOG(INFO)<<"sandyofo the OFO increasing and buffer is full ";
         rtcp_feedback_buffer_.RequestKeyFrame();
         rtcp_feedback_buffer_.SendBufferedRtcpFeedback();
         ABSL_FALLTHROUGH_INTENDED;
@@ -637,6 +640,19 @@ void RtpVideoStreamReceiver2::OnReceivedPayloadData(
   rtcp_feedback_buffer_.SendBufferedRtcpFeedback();
   frame_counter_.Add(packet->timestamp);
   OnInsertedPacket(packet_buffer_.InsertPacket(std::move(packet)));
+  // //sandykey
+  // int64_t now_ms = clock_->TimeInMilliseconds();
+  // if(!sandy_key_request){
+  //   RequestKeyFrame();
+  //   RTC_LOG(INFO)<<"sandykeyframe requested "<<now_ms;
+  //   sandy_key_request=now_ms;
+  // }else{
+  //   if(now_ms- sandy_key_request>1000 ){
+  //     RequestKeyFrame();
+  //     sandy_key_request=now_ms;
+  //     RTC_LOG(INFO)<<"sandykeyframe requested "<<now_ms;
+  //   }
+  // }
 }
 
 void RtpVideoStreamReceiver2::OnRecoveredPacket(const uint8_t* rtp_packet,
@@ -722,8 +738,10 @@ void RtpVideoStreamReceiver2::RequestKeyFrame() {
   // issued by anything other than the LossNotificationController if it (the
   // sender) is relying on LNTF alone.
   if (keyframe_request_sender_) {
+    RTC_LOG(INFO)<<"sandyofo the OFO increasing and buffer is full ";
     keyframe_request_sender_->RequestKeyFrame();
   } else {
+    // RTC_LOG(INFO)<<"sandyofo the OFO increasing and buffer is full ";
     rtp_rtcp_->SendPictureLossIndication();
   }
 }
@@ -757,6 +775,51 @@ bool RtpVideoStreamReceiver2::IsDecryptable() const {
   return frames_decryptable_;
 }
 
+double RtpVideoStreamReceiver2::LinearFitSlope(
+    const std::deque<RtpVideoStreamReceiver2::Frametimings> & frametimes) {
+  RTC_DCHECK(frametimes.size() >= 2);
+  // Compute the "center of mass".
+  double sum_x = 0;
+  double sum_y = 0;
+  for (const auto& frametime : frametimes) {
+    sum_x += frametime.count;
+    sum_y += frametime.times;
+  }
+  double x_avg = sum_x / frametimes.size();
+  double y_avg = sum_y / frametimes.size();
+  // Compute the slope k = \sum (x_i-x_avg)(y_i-y_avg) / \sum (x_i-x_avg)^2
+  double numerator = 0;
+  double denominator = 0;
+  for (const auto& frametime : frametimes) {
+    double x = frametime.count;
+    double y = frametime.times;
+    numerator += (x - x_avg) * (y - y_avg);
+    denominator += (x - x_avg) * (x - x_avg);
+  }
+  if (denominator == 0)
+    return 0;
+  return numerator / denominator;
+}
+
+void RtpVideoStreamReceiver2::MpUpdateThreshold(double modified_trend,int64_t now_ms) {
+  if (last_update_ms_ == -1)
+    last_update_ms_ = now_ms;
+
+  if (fabs(modified_trend) > threshold_ + 15) {
+    // Avoid adapting the threshold to big latency spikes, caused e.g.,
+    // by a sudden capacity drop.
+    last_update_ms_ = now_ms;
+    return;
+  }
+
+  const double k = fabs(modified_trend) < threshold_ ? 0.039 : 0.0087;
+  const int64_t kMaxTimeDeltaMs = 100;
+  int64_t time_delta_ms = std::min(now_ms - last_update_ms_, kMaxTimeDeltaMs);
+  threshold_ += k * (fabs(modified_trend) - threshold_) * time_delta_ms;
+  threshold_ = rtc::SafeClamp(threshold_, 6.f, 600.f);
+  last_update_ms_ = now_ms;
+}
+
 void RtpVideoStreamReceiver2::OnInsertedPacket(
     video_coding::PacketBuffer::InsertResult result) {
   RTC_DCHECK_RUN_ON(&worker_task_checker_);
@@ -768,6 +831,10 @@ void RtpVideoStreamReceiver2::OnInsertedPacket(
   RtpPacketInfos::vector_type packet_infos;
 
   bool frame_boundary = true;
+  
+  double arrival_time=clock_->CurrentNtpInMilliseconds();
+  int64_t sandy_start_time=0;
+  int64_t sandy_end_time=0;
   for (auto& packet : result.packets) {
     // PacketBuffer promisses frame boundaries are correctly set on each
     // packet. Document that assumption with the DCHECKs.
@@ -779,6 +846,7 @@ void RtpVideoStreamReceiver2::OnInsertedPacket(
       max_recv_time = packet->packet_info.receive_time_ms();
       payloads.clear();
       packet_infos.clear();
+      sandy_start_time=packet->packet_info.receive_time_ms();
     } else {
       max_nack_count = std::max(max_nack_count, packet->times_nacked);
       min_recv_time =
@@ -791,6 +859,10 @@ void RtpVideoStreamReceiver2::OnInsertedPacket(
 
     frame_boundary = packet->is_last_packet_in_frame();
     if (packet->is_last_packet_in_frame()) {
+      
+      if(mp_first_arrival_time_ms_<0)
+        mp_first_arrival_time_ms_=arrival_time;
+      sandy_end_time=packet->packet_info.receive_time_ms();
       auto depacketizer_it = payload_type_map_.find(first_packet->payload_type);
       RTC_CHECK(depacketizer_it != payload_type_map_.end());
 
@@ -798,7 +870,10 @@ void RtpVideoStreamReceiver2::OnInsertedPacket(
           depacketizer_it->second->AssembleFrame(payloads);
       if (!bitstream) {
         // Failed to assemble a frame. Discard and continue.
+        RTC_LOG(INFO)<<"sandyofo failed to assemble the frame";
         continue;
+      }else{
+        RTC_LOG(INFO)<<"sandyofo total time difference "<<std::abs(sandy_end_time- sandy_start_time);
       }
 
       const video_coding::PacketBuffer::Packet& last_packet = *packet;
@@ -820,11 +895,53 @@ void RtpVideoStreamReceiver2::OnInsertedPacket(
           last_packet.video_header.color_space,     //
           RtpPacketInfos(std::move(packet_infos)),  //
           std::move(bitstream)));
+      //sandy: Frame is constructed now measure the rate of increase and decrease for RTP frame construction.
+      double trend = prev_trend_;
+      double gap=std::abs(double(sandy_end_time- sandy_start_time));
+      ++num_of_deltas_;
+      num_of_deltas_ = std::min(num_of_deltas_, 1000);
+      // mp_accumulated_timings_ +=gap;
+      mp_smoothed_timings_=0.9 * mp_smoothed_timings_ +
+                    0.1 * gap;
+      frame_timings_.emplace_back(double(arrival_time-mp_first_arrival_time_ms_),mp_smoothed_timings_);
+      if (frame_timings_.size() > 100){
+        frame_timings_.pop_front();
+      }
+      double modified_trend =
+        std::min(num_of_deltas_, 60) * trend * 4.0;
+      if (frame_timings_.size() == 100) {
+
+        trend = LinearFitSlope(frame_timings_);
+        prev_trend_=trend;
+        modified_trend = std::min(num_of_deltas_, 60) * trend * 4.0;
+        if(modified_trend>threshold_){
+        // if (trend > 0)
+          if(arrival_time- last_key_frame_time>key_frame_interval){//sandy: Allow atleast 300 ms gap to request key frame.
+            RequestKeyFrame();
+            last_key_frame_time=arrival_time;
+            RTC_LOG(INFO)<<"sandyofo the OFO increasing and requesting key frame trend= "<<trend<<" modified_trend = "<<modified_trend<<" gap ="<<gap 
+            <<" smoothened gap "<<mp_smoothed_timings_ << "threshold_ "<<threshold_;
+          }
+        }
+        // else if(trend<0)
+        else if(modified_trend<-1*threshold_)
+          RTC_LOG(INFO)<<"sandyofo the OFO is decreasing trend= "<<trend<<" modified_trend = "<<modified_trend<<" gap ="<<gap 
+        <<" smoothened gap "<<mp_smoothed_timings_ << "threshold_ "<<threshold_;
+        else
+          RTC_LOG(INFO)<<"sandyofo the OFO is constant trend= "<<trend<<" modified_trend = "<<modified_trend<<" gap ="<<gap 
+        <<" smoothened gap "<<mp_smoothed_timings_  << "threshold_ "<<threshold_;
+      }
+      MpUpdateThreshold(modified_trend,  arrival_time);
+      
     }
   }
   RTC_DCHECK(frame_boundary);
   if (result.buffer_cleared) {
-    RequestKeyFrame();
+    
+    if(arrival_time!=last_key_frame_time){//sandy: You just requested the Key frame and do not request it again.
+      RTC_LOG(INFO)<<"sandyofo the OFO increasing and buffer is full ";
+      RequestKeyFrame();
+    }
   }
 }
 
@@ -852,6 +969,7 @@ void RtpVideoStreamReceiver2::OnAssembledFrame(
       // requested a key frame when the first packet for the non-key frame
       // had arrived, so no need to replicate the request.
       if (!loss_notification_controller_) {
+        RTC_LOG(INFO)<<"sandyofo the OFO increasing and buffer is full ";
         RequestKeyFrame();
       }
     }
@@ -1057,10 +1175,10 @@ void RtpVideoStreamReceiver2::NotifyReceiverOfEmptyPacket(
   OnInsertedPacket(packet_buffer_.InsertPadding(seq_num));
   if (nack_module_ && pathid!=2)  {
 
-    nack_module_->OnReceivedPacket(seq_num, mp_seq_num,/* is_keyframe = */ false,
+    nack_module_->OnReceivedPacket(mp_seq_num,/* is_keyframe = */ false,
                                    /* is _recovered = */ false,pathid);
   }else if(nack_module_s_ && pathid==2){
-    nack_module_s_->OnReceivedPacket(seq_num, mp_seq_num,/* is_keyframe = */ false,
+    nack_module_s_->OnReceivedPacket(mp_seq_num,/* is_keyframe = */ false,
                                    /* is _recovered = */ false,pathid);
   }
   if (loss_notification_controller_) {
@@ -1124,8 +1242,9 @@ void RtpVideoStreamReceiver2::FrameContinuous(int64_t picture_id) {
   if (seq_num_it != last_seq_num_for_pic_id_.end())
     seq_num = seq_num_it->second;
   if (seq_num != -1){
-    nack_module_->ClearUpTo(seq_num);
-    nack_module_s_->ClearUpTo(seq_num);
+    //sandy: I have added the nack module with mpsequence numbers and hence I am cpmmenting out these two below line
+    // nack_module_->ClearUpTo(seq_num);
+    // nack_module_s_->ClearUpTo(seq_num);//sandy:This could be problem
   }
 }
 

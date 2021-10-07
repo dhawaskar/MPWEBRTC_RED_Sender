@@ -18,12 +18,18 @@ Support file to collect information from webrtc
 #include "rtc_base/network.h"
 #include "rtc_base/system/rtc_export.h"
 #include "rtc_base/thread.h"
+#include "absl/types/optional.h"
+#include "api/units/data_rate.h"
+#include "api/units/data_size.h"
+#include "api/units/time_delta.h"
+#include "api/units/timestamp.h"
+#include "rtc_base/deprecation.h"
 #include <deque>
 
 
 
 
-// namespace webrtc {
+
 // namespace rtcp {
 
 
@@ -58,13 +64,19 @@ public:
 
 	std::deque<SandyCandidate> sandycandidates;	
 	std::deque<SandyConnection> sandyconnections;
-
+	long primary_congestion_wnd_= 1200;
+	long secondary_congestion_wnd_= 1200;
+	uint32_t fps_=0;
 	int MPWebRTC_enabled=0;
 	int MPSecond_path=0;   //Check if the second path is set
 	uint32_t primary_seq=0;//Sequence number of primary path with path id 1
 	uint32_t secondary_seq=0;//sequence numner of secondary path with path id 2
 	uint32_t total_packets_sent=0;//Total packets from the rtp_sender_egress
 	int pathid=0;
+	int spath_lock_=0;
+	int ppath_lock_=0;
+	int best_pathid_=0;
+	double ratio_=0;
 	std::string scheduler_="rr";
 
 	void MpStoreCandidate (std::string ip, int port,uint32_t priority,std::string transport_name, 
@@ -85,6 +97,18 @@ public:
 	void MpSetMpWebRTCStatus(int status){ 
 		MPWebRTC_enabled=status;
 	}
+	int MpGetBestPathId(){//If MP-webRTC is enabled
+		return best_pathid_;
+	}
+	void MpSetBestPathId(int pathid){ 
+		best_pathid_=pathid;
+	}
+	double MpGetRatio(){//If MP-webRTC is enabled
+		return ratio_;
+	}
+	void MpSetRatio(double ratio){ 
+		ratio_=ratio;;
+	}
 	bool MpISsecondPathOpen(){ //Check if Second path in Mp-WebRTC is active?
 		return MPSecond_path;
 	}
@@ -96,6 +120,38 @@ public:
 	}
 	std::string MpGetScheduler(){
 		return scheduler_;
+	}
+	long MpGetPrimaryWindow(){
+		return primary_congestion_wnd_;
+	}
+	long MpGetSecondaryWindow(){
+		return secondary_congestion_wnd_;
+	}
+	void MpSetPrimaryWindow(long pwnd){
+		primary_congestion_wnd_=pwnd;
+	}
+	void MpSetSecondaryWindow(long swnd){
+		secondary_congestion_wnd_=swnd;
+	}
+	void MpSetWindowLock(int pathid){
+		if(pathid==1){
+			ppath_lock_=1;
+		}else{
+			spath_lock_=1;
+		}
+	}
+	void MpClearWindowLock(int pathid){
+		if(pathid==1){
+			ppath_lock_=0;
+		}else{
+			spath_lock_=0;
+		}
+	}
+	void MpSetFrameRate(uint32_t fps){
+		fps_=fps;
+	}
+	uint32_t MpGetFrameRate(){
+		return fps_;
 	}
 
 };

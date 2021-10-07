@@ -280,8 +280,10 @@ void AimdRateControl::ChangeBitrate(const RateControlInput& input,
       1.5 * estimated_throughput + DataRate::KilobitsPerSec(10);
 
   switch (rate_control_state_) {
-    case kRcHold:
+    case kRcHold:{
+      RTC_LOG(INFO)<<"sandyratio keep the bitrate same";
       break;
+    }
 
     case kRcIncrease:
       if (estimated_throughput > link_capacity_.UpperBound())
@@ -314,11 +316,12 @@ void AimdRateControl::ChangeBitrate(const RateControlInput& input,
       }
 
       time_last_bitrate_change_ = at_time;
+      RTC_LOG(INFO)<<"sandyratio increase the bitrate";
       break;
 
     case kRcDecrease: {
       DataRate decreased_bitrate = DataRate::PlusInfinity();
-
+      RTC_LOG(INFO)<<"sandyratio decrease the bitrate";
       // Set bit rate to something slightly lower than the measured throughput
       // to get rid of any self-induced delay.
       decreased_bitrate = estimated_throughput * beta_;

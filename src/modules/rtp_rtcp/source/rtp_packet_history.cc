@@ -20,6 +20,8 @@
 #include "rtc_base/checks.h"
 #include "rtc_base/logging.h"
 #include "system_wrappers/include/clock.h"
+#include "api/mp_collector.h"
+#include "api/mp_global.h"
 
 namespace webrtc {
 
@@ -121,6 +123,8 @@ void RtpPacketHistory::SetRtt(int64_t rtt_ms) {
 
 void RtpPacketHistory::PutRtpPacket(std::unique_ptr<RtpPacketToSend> packet,
                                     absl::optional<int64_t> send_time_ms) {
+  //sandy: For Mp-WebRTC please use subflow sequence numbers. If the single path is used,subflow and sequence numbers are same. If the multipath used
+  //then subflo sequence works fine.
   RTC_DCHECK(packet);
   rtc::CritScope cs(&lock_);
   int64_t now_ms = clock_->TimeInMilliseconds();
@@ -132,7 +136,8 @@ void RtpPacketHistory::PutRtpPacket(std::unique_ptr<RtpPacketToSend> packet,
   CullOldPackets(now_ms);
 
   // Store packet.
-  const uint16_t rtp_seq_no = packet->SequenceNumber();
+  // const uint16_t rtp_seq_no = packet->SequenceNumber();//sandy: Changing this to mpsubflow sequence
+  uint16_t rtp_seq_no=packet->subflow_seq;
   int packet_index = GetPacketIndex(rtp_seq_no);
   if (packet_index >= 0u &&
       static_cast<size_t>(packet_index) < packet_history_.size() &&
@@ -355,7 +360,7 @@ std::unique_ptr<RtpPacketToSend> RtpPacketHistory::GetPayloadPaddingPacket(
   return padding_packet;
 }
 
-void RtpPacketHistory::CullAcknowledgedPackets(
+void RtpPacketHistory::CullAcknowledgedPackets(//sandy: Here it is sequence numbers
     rtc::ArrayView<const uint16_t> sequence_numbers) {
   rtc::CritScope cs(&lock_);
   for (uint16_t sequence_number : sequence_numbers) {
@@ -456,7 +461,8 @@ int RtpPacketHistory::GetPacketIndex(uint16_t sequence_number) const {
   }
 
   RTC_DCHECK(packet_history_.front().packet_ != nullptr);
-  int first_seq = packet_history_.front().packet_->SequenceNumber();
+  // int first_seq = packet_history_.front().packet_->SequenceNumber();//sandy: Changing this to subflow
+  int first_seq = packet_history_.front().packet_->subflow_seq;
   if (first_seq == sequence_number) {
     return 0;
   }
@@ -490,7 +496,7 @@ RtpPacketHistory::StoredPacket* RtpPacketHistory::GetStoredPacket(
 RtpPacketHistory::PacketState RtpPacketHistory::StoredPacketToPacketState(
     const RtpPacketHistory::StoredPacket& stored_packet) {
   RtpPacketHistory::PacketState state;
-  state.rtp_sequence_number = stored_packet.packet_->SequenceNumber();
+  state.rtp_sequence_number = stored_packet.packet_->SequenceNumber();//sandy: Changing sequence to mpsubflow
   state.send_time_ms = stored_packet.send_time_ms_;
   state.capture_time_ms = stored_packet.packet_->capture_time_ms();
   state.ssrc = stored_packet.packet_->Ssrc();

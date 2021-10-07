@@ -1212,6 +1212,7 @@ void RTCPReceiver::TriggerCallbacksFromRtcpPacket(
     RTC_DCHECK(!receiver_only_);
     if ((packet_information.packet_type_flags & kRtcpPli) ||
         (packet_information.packet_type_flags & kRtcpFir)) {
+      
       if (packet_information.packet_type_flags & kRtcpPli) {
         RTC_LOG(LS_VERBOSE)
             << "Incoming PLI from SSRC " << packet_information.remote_ssrc;
@@ -1219,7 +1220,7 @@ void RTCPReceiver::TriggerCallbacksFromRtcpPacket(
         RTC_LOG(LS_VERBOSE)
             << "Incoming FIR from SSRC " << packet_information.remote_ssrc;
       }
-      //RTC_LOG(INFO)<<"sandy: PLI/ FIR is received\n";
+      RTC_LOG(INFO)<<"sandy: PLI/ FIR is received\n";
       rtcp_intra_frame_observer_->OnReceivedIntraFrameRequest(local_ssrc);
     }
   }

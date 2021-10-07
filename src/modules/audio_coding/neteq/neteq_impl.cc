@@ -547,7 +547,7 @@ int NetEqImpl::InsertPacketInternal(const RTPHeader& rtp_header,
     RTC_LOG_F(LS_ERROR) << "payload is empty";
     return kInvalidPointer;
   }
-
+  RTC_LOG(INFO)<<"sandy inserted packet into neteqation";
   int64_t receive_time_ms = clock_->TimeInMilliseconds();
   stats_->ReceivedPacket();
 

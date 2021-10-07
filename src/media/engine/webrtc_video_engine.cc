@@ -266,7 +266,7 @@ static int GetMaxDefaultVideoBitrateKbps(int width,
   } else if (width * height <= 960 * 540) {
     max_bitrate = 2000;
   } else {
-    max_bitrate = 10000;//2500
+    max_bitrate = 50000;//2500
   }
   if (is_screenshare)
     max_bitrate = std::max(max_bitrate, 1200);
@@ -764,7 +764,7 @@ bool WebRtcVideoChannel::GetChangedSendParameters(
 	for (const auto& send_codec : negotiated_codecs){
         if(send_codec.codec.ToString().find("H264")!=std::string::npos){
           changed_params->send_codec = send_codec;
-          //RTC_LOG(INFO)<<"sandy the send codec is: "<<changed_params->send_codec->codec.ToString();
+          RTC_LOG(INFO)<<"sandy the send codec is: "<<changed_params->send_codec->codec.ToString();
           break;
         }
       }
@@ -1929,8 +1929,11 @@ bool WebRtcVideoChannel::SendRtp(const uint8_t* data,
 }
 
 bool WebRtcVideoChannel::SendRtcp(const uint8_t* data, size_t len,int pathid) {
+  // RTC_DCHECK(pathid>0);
+  RTC_LOG(INFO)<<"sandyrtt sening RTCP packet path "<<pathid;
   rtc::CopyOnWriteBuffer packet(data, len, kMaxRtpPacketLen);
   rtc::PacketOptions rtc_options;
+  rtc_options.pathid=pathid;
   if (DscpEnabled()) {
     rtc_options.dscp = PreferredDscp();
   }

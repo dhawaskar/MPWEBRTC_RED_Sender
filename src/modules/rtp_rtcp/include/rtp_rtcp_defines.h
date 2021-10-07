@@ -285,6 +285,7 @@ class StreamFeedbackObserver {
   struct StreamPacketInfo {
     uint32_t ssrc;
     uint16_t rtp_sequence_number;
+    uint16_t mp_rtp_sequence_number;
     int pathid;
     bool received;
   };

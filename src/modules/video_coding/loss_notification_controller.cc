@@ -167,6 +167,7 @@ void LossNotificationController::HandleLoss(uint16_t last_received_seq_num,
         last_decodable_non_discardable_->first_seq_num, last_received_seq_num,
         decodability_flag, /*buffering_allowed=*/true);
   } else {
+    RTC_LOG(INFO)<<"sandyofo the OFO increasing and buffer is full ";
     key_frame_request_sender_->RequestKeyFrame();
   }
 }

@@ -1562,7 +1562,7 @@ void BuildMediaDescription(const ContentInfo* content_info,
   }
   //sandy: add the scheduler
   InitAttrLine(kMpScheduler, &os);
-  os << kSdpDelimiterColon << "red";
+  os << kSdpDelimiterColon << "window";
   AddLine(os.str(), message);  
 }
 

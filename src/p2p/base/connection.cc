@@ -834,6 +834,7 @@ void Connection::UpdateState(int64_t now) {
   // Update the receiving state.
   UpdateReceiving(now);
   if (dead(now)) {
+    RTC_LOG(INFO)<<"sandyconnection: Connection has been dead for long time:";
     Destroy();
   }
 }
@@ -1215,6 +1216,7 @@ void Connection::OnMessage(rtc::Message* pmsg) {
   RTC_DCHECK(pmsg->message_id == MSG_DELETE);
   RTC_LOG(LS_INFO) << "Connection deleted with number of pings sent: "
                    << num_pings_sent_;
+  RTC_DLOG(LS_ERROR)<<"connection failures";//sandy: Connection failure here
   SignalDestroyed(this);
   delete this;
 }

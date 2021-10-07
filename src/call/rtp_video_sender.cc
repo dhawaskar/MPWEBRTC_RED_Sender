@@ -867,6 +867,8 @@ void RtpVideoSender::SetFecAllowed(bool fec_allowed) {
 
 void RtpVideoSender::OnPacketFeedbackVector(
     std::vector<StreamPacketInfo> packet_feedback_vector,int pathid) {
+
+
   if (fec_controller_->UseLossVectorMask()) {
     rtc::CritScope cs(&crit_);
     for (const StreamPacketInfo& packet : packet_feedback_vector) {
@@ -877,8 +879,10 @@ void RtpVideoSender::OnPacketFeedbackVector(
   // Map from SSRC to all acked packets for that RTP module.
   std::map<uint32_t, std::vector<uint16_t>> acked_packets_per_ssrc;
   for (const StreamPacketInfo& packet : packet_feedback_vector) {
+
     if (packet.received) {
-      acked_packets_per_ssrc[packet.ssrc].push_back(packet.rtp_sequence_number);
+      // acked_packets_per_ssrc[packet.ssrc].push_back(packet.rtp_sequence_number);//sandy: Change this. History is matained now by the mpsequence numbers
+      acked_packets_per_ssrc[packet.ssrc].push_back(packet.mp_rtp_sequence_number);
     }
   }
 
@@ -891,8 +895,9 @@ void RtpVideoSender::OnPacketFeedbackVector(
       if (!packet.received) {
         // Last known lost packet, might not be detectable as lost by remote
         // jitter buffer.
-        early_loss_detected_per_ssrc[packet.ssrc].push_back(
-            packet.rtp_sequence_number);
+        early_loss_detected_per_ssrc[packet.ssrc].push_back(//sandy: Change this. History is matained now by the mpsequence numbers
+            // packet.rtp_sequence_number);
+          packet.mp_rtp_sequence_number);
       } else {
         // Packet received, so any loss prior to this is already detectable.
         early_loss_detected_per_ssrc.erase(packet.ssrc);

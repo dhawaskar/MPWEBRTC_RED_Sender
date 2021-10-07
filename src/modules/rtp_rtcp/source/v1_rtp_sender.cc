@@ -43,7 +43,7 @@ namespace {
 constexpr size_t kMaxPaddingLength = 224;
 constexpr size_t kMinAudioPaddingLength = 50;
 constexpr size_t kRtpHeaderLength = 12;
-constexpr uint16_t kMaxInitRtpSeqNumber = 32767;  // 2^15 -1.
+//constexpr uint16_t kMaxInitRtpSeqNumber = 32767;  // 2^15 -1.
 constexpr uint32_t kTimestampTicksPerMs = 90;
 
 // Min size needed to get payload padding from packet history.
@@ -63,6 +63,7 @@ constexpr RtpExtensionSize CreateMaxExtensionSize() {
 constexpr RtpExtensionSize kFecOrPaddingExtensionSizes[] = {
     CreateExtensionSize<AbsoluteSendTime>(),
     CreateExtensionSize<sandy>(),//Mp-WebRTC
+    //CreateExtensionSize<MpFlowID>(),//MP-WebRTC
     CreateExtensionSize<MpFlowSeqNum>(),//Mp-WebRTC
     CreateExtensionSize<MpTransportSequenceNumber>(),//Mp-WebRTC
     CreateExtensionSize<TransmissionOffset>(),
@@ -76,6 +77,7 @@ constexpr RtpExtensionSize kFecOrPaddingExtensionSizes[] = {
 constexpr RtpExtensionSize kVideoExtensionSizes[] = {
     CreateExtensionSize<AbsoluteSendTime>(),
     CreateExtensionSize<sandy>(),//Mp-WebRTC
+    //CreateExtensionSize<MpFlowID>(),//MP-WebRTC
     CreateExtensionSize<MpFlowSeqNum>(),//Mp-WebRTC
     CreateExtensionSize<MpTransportSequenceNumber>(),//Mp-WebRTC
     CreateExtensionSize<AbsoluteCaptureTimeExtension>(),
@@ -96,6 +98,7 @@ constexpr RtpExtensionSize kVideoExtensionSizes[] = {
 constexpr RtpExtensionSize kAudioExtensionSizes[] = {
     CreateExtensionSize<AbsoluteSendTime>(),
     CreateExtensionSize<sandy>(),//Mp-WebRTC
+    //CreateExtensionSize<MpFlowID>(),//MP-WebRTC
     CreateExtensionSize<MpFlowSeqNum>(),//Mp-WebRTC
     CreateExtensionSize<MpTransportSequenceNumber>(),//Mp-WebRTC
     CreateExtensionSize<AbsoluteCaptureTimeExtension>(),
@@ -118,6 +121,7 @@ bool IsNonVolatile(RTPExtensionType type) {
     case kRtpExtensionAudioLevel:
     case kRtpExtensionAbsoluteSendTime:
     case kRtpExtensionsandy://Mp-WebRTC
+    //case kRtpExtensionMpFlowID://Mp-WebRTC
     case kRtpExtensionMpFlowSeqNum://Mp-WebRTC
     case kRtpExtensionMpTransportSequenceNumber:
     case kRtpExtensionTransportSequenceNumber:
@@ -146,8 +150,9 @@ bool IsNonVolatile(RTPExtensionType type) {
 bool HasBweExtension(const RtpHeaderExtensionMap& extensions_map) {
   return extensions_map.IsRegistered(kRtpExtensionTransportSequenceNumber) ||
          extensions_map.IsRegistered(kRtpExtensionTransportSequenceNumber02) ||
-         extensions_map.IsRegistered(kRtpExtensionAbsoluteSendTime) || 
+         extensions_map.IsRegistered(kRtpExtensionAbsoluteSendTime) ||
          extensions_map.IsRegistered(kRtpExtensionsandy) || //MP-WebRTC
+         //extensions_map.IsRegistered(kRtpExtensionMpFlowID) || //MP-WebRTC
          extensions_map.IsRegistered(kRtpExtensionMpFlowSeqNum) || //MP-WebRTC
          extensions_map.IsRegistered(kRtpExtensionMpTransportSequenceNumber) ||//MP-WebRTC  
          extensions_map.IsRegistered(kRtpExtensionTransmissionTimeOffset);
@@ -171,7 +176,7 @@ double GetMaxPaddingSizeFactor(const WebRtcKeyValueConfig* field_trials) {
 }  // namespace
 
 RTPSender::RTPSender(const RtpRtcpInterface::Configuration& config,
-                     RtpPacketHistory* packet_history,
+                     RtpPacketHistory* packet_history_p,RtpPacketHistory* packet_history_s,
                      RtpPacketSender* packet_sender)
     : clock_(config.clock),
       random_(clock_->TimeInMicroseconds()),
@@ -181,10 +186,12 @@ RTPSender::RTPSender(const RtpRtcpInterface::Configuration& config,
       flexfec_ssrc_(config.fec_generator ? config.fec_generator->FecSsrc()
                                          : absl::nullopt),
       max_padding_size_factor_(GetMaxPaddingSizeFactor(config.field_trials)),
-      packet_history_(packet_history),
+      packet_history_p_(packet_history_p),
+      packet_history_s_(packet_history_s),
       paced_sender_(packet_sender),
       sending_media_(true),                   // Default to sending media.
-      max_packet_size_(IP_PACKET_SIZE - 36),  // Default is IP-v4/UDP.sandy: +8 for mpwebrtc and hence -28 changed to -36
+      max_packet_size_(IP_PACKET_SIZE - 36),  // Default is IP-v4/UDP. //sandy: +5 for flow id,MpSequence and TransportSequence
+      //sandy: So I change it 28 to 33
       last_payload_type_(-1),
       rtp_header_extension_map_(config.extmap_allow_mixed),
       max_media_packet_header_(kRtpHeaderSize),
@@ -202,19 +209,24 @@ RTPSender::RTPSender(const RtpRtcpInterface::Configuration& config,
       rtx_(kRtxOff),
       supports_bwe_extension_(false),
       retransmission_rate_limiter_(config.retransmission_rate_limiter) {
-  // This random initialization is not intended to be cryptographic strong.
-        if(!mpcollector_){
+
+  if(!mpcollector_){
     //RTC_LOG(INFO)<<"MpCollector pointer:created newly\n";
     mpcollector_=new MpCollector();
-  } 
+  }     
+  // This random initialization is not intended to be cryptographic strong.
   timestamp_offset_ = random_.Rand<uint32_t>();
   // Random start, 16 bits. Can't be 0.
-  sequence_number_rtx_ = random_.Rand(1, kMaxInitRtpSeqNumber);
-  sequence_number_ = random_.Rand(1, kMaxInitRtpSeqNumber);
+  //sequence_number_rtx_ = random_.Rand(1, kMaxInitRtpSeqNumber);//sandy: commented this
+  sequence_number_rtx_ = 1;
+  // sequence_number_ = random_.Rand(1, kMaxInitRtpSeqNumber);//sandy: Set the starting number here
+  sequence_number_ = 10;
   sequence_number_p_=10;
   sequence_number_s_=10;
+
   RTC_DCHECK(paced_sender_);
-  RTC_DCHECK(packet_history_);
+  RTC_DCHECK(packet_history_p_);
+  RTC_DCHECK(packet_history_s_);
 }
 
 RTPSender::~RTPSender() {
@@ -320,11 +332,20 @@ void RTPSender::SetRtxPayloadType(int payload_type,
   rtx_payload_type_map_[associated_payload_type] = payload_type;
 }
 
-int32_t RTPSender::ReSendPacket(uint16_t packet_id) {
+int32_t RTPSender::ReSendPacket(uint16_t packet_id,int pathid) {
+  if(pathid!=2){
+  //primary
+    return ReSendPacketPrimary(packet_id,packet_id);
+  }else{
+    return ReSendPacketSecondary(packet_id,pathid);
+  }
+}
+//sandy:Mp-WebRTC primary path
+int32_t RTPSender::ReSendPacketPrimary(uint16_t packet_id,int pathid) {
   // Try to find packet in RTP packet history. Also verify RTT here, so that we
   // don't retransmit too often.
   absl::optional<RtpPacketHistory::PacketState> stored_packet =
-      packet_history_->GetPacketState(packet_id);
+      packet_history_p_->GetPacketState(packet_id);
   if (!stored_packet || stored_packet->pending_transmission) {
     // Packet not found or already queued for retransmission, ignore.
     return 0;
@@ -332,9 +353,9 @@ int32_t RTPSender::ReSendPacket(uint16_t packet_id) {
 
   const int32_t packet_size = static_cast<int32_t>(stored_packet->packet_size);
   const bool rtx = (RtxStatus() & kRtxRetransmitted) > 0;
-
+  RTC_LOG(INFO)<<"sandystats resending primary path packets";
   std::unique_ptr<RtpPacketToSend> packet =
-      packet_history_->GetPacketAndMarkAsPending(
+      packet_history_p_->GetPacketAndMarkAsPending(
           packet_id, [&](const RtpPacketToSend& stored_packet) {
             // Check if we're overusing retransmission bitrate.
             // TODO(sprang): Add histograms for nack success or failure
@@ -365,12 +386,64 @@ int32_t RTPSender::ReSendPacket(uint16_t packet_id) {
   packet->set_packet_type(RtpPacketMediaType::kRetransmission);
   std::vector<std::unique_ptr<RtpPacketToSend>> packets;
   packets.emplace_back(std::move(packet));
-  paced_sender_->EnqueuePackets(std::move(packets));
+  //sandy: This packet do not need to go through splitter as this has got path id and subflow seq numbers already
+  paced_sender_->EnqueuePackets(std::move(packets));//sandy: This means the packet will have unique MPTransport Number
+  return packet_size;
+}
+//sandy:Mp-WebRTC secondary path
+int32_t RTPSender::ReSendPacketSecondary(uint16_t packet_id,int pathid) {
+  // Try to find packet in RTP packet history. Also verify RTT here, so that we
+  // don't retransmit too often.
+  absl::optional<RtpPacketHistory::PacketState> stored_packet =
+      packet_history_s_->GetPacketState(packet_id);
+  if (!stored_packet || stored_packet->pending_transmission) {
+    // Packet not found or already queued for retransmission, ignore.
+    return 0;
+  }
 
+  const int32_t packet_size = static_cast<int32_t>(stored_packet->packet_size);
+  const bool rtx = (RtxStatus() & kRtxRetransmitted) > 0;
+   RTC_LOG(INFO)<<"sandystats resending secondary path packets";
+  std::unique_ptr<RtpPacketToSend> packet =
+      packet_history_s_->GetPacketAndMarkAsPending(
+          packet_id, [&](const RtpPacketToSend& stored_packet) {
+            // Check if we're overusing retransmission bitrate.
+            // TODO(sprang): Add histograms for nack success or failure
+            // reasons.
+            std::unique_ptr<RtpPacketToSend> retransmit_packet;
+            if (retransmission_rate_limiter_ &&
+                !retransmission_rate_limiter_->TryUseRate(packet_size)) {
+              return retransmit_packet;
+            }
+            if (rtx) {
+              retransmit_packet = BuildRtxPacket(stored_packet);
+            } else {
+              retransmit_packet =
+                  std::make_unique<RtpPacketToSend>(stored_packet);
+            }
+            if (retransmit_packet) {
+              retransmit_packet->set_retransmitted_sequence_number(
+                  stored_packet.SequenceNumber());
+              //sandy: Assign the subflow id and subflow seq from history
+              retransmit_packet->subflow_seq=stored_packet.subflow_seq;
+              retransmit_packet->subflow_id=stored_packet.subflow_id;
+            }
+            return retransmit_packet;
+          });
+  if (!packet) {
+    //RTC_LOG(INFO)<<"sandynack the packet is not present in secondary history "<<packet_id<<"\n";
+    return -1;
+  }
+  packet->set_packet_type(RtpPacketMediaType::kRetransmission);
+  std::vector<std::unique_ptr<RtpPacketToSend>> packets;
+  packets.emplace_back(std::move(packet));
+  paced_sender_->EnqueuePackets(std::move(packets));//sandy: This means the packet will have unique MPTransport Number
   return packet_size;
 }
 
 void RTPSender::OnReceivedAckOnSsrc(int64_t extended_highest_sequence_number) {
+
+  //RTC_LOG(INFO)<<"sandy received ack for "<<extended_highest_sequence_number<<"\n";
   rtc::CritScope lock(&send_critsect_);
   bool update_required = !ssrc_has_acked_;
   ssrc_has_acked_ = true;
@@ -381,16 +454,28 @@ void RTPSender::OnReceivedAckOnSsrc(int64_t extended_highest_sequence_number) {
 
 void RTPSender::OnReceivedAckOnRtxSsrc(
     int64_t extended_highest_sequence_number) {
+
+  //RTC_LOG(INFO)<<"sandy received ack for rtx "<<extended_highest_sequence_number<<"\n";
   rtc::CritScope lock(&send_critsect_);
   rtx_ssrc_has_acked_ = true;
 }
-
+//sandy: Study this
 void RTPSender::OnReceivedNack(
     const std::vector<uint16_t>& nack_sequence_numbers,
-    int64_t avg_rtt) {
-  packet_history_->SetRtt(5 + avg_rtt);
+    int64_t avg_rtt,int pathid) {
+  // RTC_LOG(INFO)<<"sandystats received nack for path= "<<pathid;
+  if(pathid!=2){
+    packet_history_p_->SetRtt(5 + avg_rtt);
+    //RTC_LOG(INFO)<<"sandyrtt the primary path rtt is "<<avg_rtt<<'\n';
+  }
+  else if(pathid==2){
+    packet_history_s_->SetRtt(5 + avg_rtt);
+    //RTC_LOG(INFO)<<"sandyrtt the secondary path rtt is "<<avg_rtt<<'\n';
+  }
+  
   for (uint16_t seq_no : nack_sequence_numbers) {
-    const int32_t bytes_sent = ReSendPacket(seq_no);
+    // RTC_LOG(INFO)<<"sandy received negetive ack for packet "<<seq_no<<" path "<<pathid<<"\n";
+    const int32_t bytes_sent = ReSendPacket(seq_no,pathid);
     if (bytes_sent < 0) {
       // Failed to send one Sequence number. Give up the rest in this nack.
       RTC_LOG(LS_WARNING) << "Failed resending RTP packet " << seq_no
@@ -410,7 +495,8 @@ bool RTPSender::SupportsRtxPayloadPadding() const {
   return sending_media_ && supports_bwe_extension_ &&
          (rtx_ & kRtxRedundantPayloads);
 }
-
+//sandy: Generating the packet
+//sandy: You need to assign the path id here as well yet to implement
 std::vector<std::unique_ptr<RtpPacketToSend>> RTPSender::GeneratePadding(
     size_t target_size_bytes,
     bool media_has_been_sent) {
@@ -424,7 +510,7 @@ std::vector<std::unique_ptr<RtpPacketToSend>> RTPSender::GeneratePadding(
   if (SupportsRtxPayloadPadding()) {
     while (bytes_left >= kMinPayloadPaddingBytes) {
       std::unique_ptr<RtpPacketToSend> packet =
-          packet_history_->GetPayloadPaddingPacket(
+          packet_history_p_->GetPayloadPaddingPacket(//sandy: yet to implement
               [&](const RtpPacketToSend& packet)
                   -> std::unique_ptr<RtpPacketToSend> {
                 // Limit overshoot, generate <= |max_padding_size_factor_| *
@@ -530,6 +616,9 @@ std::vector<std::unique_ptr<RtpPacketToSend>> RTPSender::GeneratePadding(
     if(rtp_header_extension_map_.IsRegistered(sandy::kId)){
       padding_packet->ReserveExtension<sandy>();
     }
+    // if(rtp_header_extension_map_.IsRegistered(MpFlowID::kId)){
+    //   padding_packet->ReserveExtension<MpFlowID>();
+    // }
     if(rtp_header_extension_map_.IsRegistered(MpFlowSeqNum::kId)){
       padding_packet->ReserveExtension<MpFlowSeqNum>();
     }
@@ -537,54 +626,13 @@ std::vector<std::unique_ptr<RtpPacketToSend>> RTPSender::GeneratePadding(
       padding_packet->ReserveExtension<MpTransportSequenceNumber>();
     }
 
+
     padding_packet->SetPadding(padding_bytes_in_packet);
     bytes_left -= std::min(bytes_left, padding_bytes_in_packet);
     padding_packets.push_back(std::move(padding_packet));
   }
 
   return padding_packets;
-}
-
-//sandy: Traffic split function implementation
-void RTPSender::MPTrafficSplitImplementation(
-  std::vector<std::unique_ptr<RtpPacketToSend>> packets){
-  // rtc::CritScope lock(&send_critsect_);
-  //sandy: Now split the traffic and assign subflow seq number to each of the flow.
-  for (auto& packet : packets) {
-    // packet->subflow_id=1;
-    // packet->subflow_seq=sequence_number_p_++;
-    if(!mpcollector_->MpISsecondPathOpen() || 
-    total_packets_sent%2==0){//sandy: Set into primary path
-      packet->subflow_id=1;
-      packet->subflow_seq=sequence_number_p_++;
-      if(!mpcollector_->MpISsecondPathOpen() && packet->subflow_seq!=packet->SequenceNumber() && packet->SequenceNumber()>0 ){
-        sequence_number_p_=packet->SequenceNumber();
-        packet->subflow_seq=packet->SequenceNumber();
-      }
-      //mpcollector_->pathid=1;//sandy: Need this for splitting traffic in p2p_transport_channel.cc
-    }else if(mpcollector_->MpISsecondPathOpen()){
-      // RTC_LOG(INFO)<<"sandy setting the secondary path";
-      packet->subflow_id=2;
-      packet->subflow_seq=sequence_number_s_++;
-      //mpcollector_->pathid=2;//sandy: Need this for splitting traffic in p2p_transport_channel.cc
-    }
-    if (total_packets_sent < 4294967295)  total_packets_sent++;
-    else total_packets_sent=1;
-    RTC_DCHECK(packet->subflow_id>=1);
-    //sandy: Now assign packet path
-    if (packet->HasExtension<sandy>()){
-      if(packet->subflow_id==1)
-        packet->SetExtension<sandy>(0x1);
-      else 
-        packet->SetExtension<sandy>(0x2);
-    }
-
-    //sandy: Now assign the subflow sequence number
-    if (packet->HasExtension<MpFlowSeqNum>()){
-      packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
-    }
-  }
-  paced_sender_->EnqueuePackets(std::move(packets));//Traffic is only in one single path
 }
 
 bool RTPSender::SendToNetwork(std::unique_ptr<RtpPacketToSend> packet) {
@@ -597,7 +645,7 @@ bool RTPSender::SendToNetwork(std::unique_ptr<RtpPacketToSend> packet) {
   if (packet->capture_time_ms() <= 0) {
     packet->set_capture_time_ms(now_ms);
   }
-  
+
   std::vector<std::unique_ptr<RtpPacketToSend>> packets;
   packets.emplace_back(std::move(packet));
   MPTrafficSplitImplementation(std::move(packets));//sandy: Send to traffic splitter
@@ -605,6 +653,159 @@ bool RTPSender::SendToNetwork(std::unique_ptr<RtpPacketToSend> packet) {
  // paced_sender_->EnqueuePackets(std::move(packets));
   return true;
 }
+//sandy: Traffic split function implementation
+void RTPSender::MPTrafficSplitImplementation(
+  std::vector<std::unique_ptr<RtpPacketToSend>> packets){
+  //rtc::CritScope lock(&send_critsect_);
+  //sandy: Now split the traffic and assign subflow seq number to each of the flow. 
+  //sandy: First get total size of packets
+  int64_t now_ms = clock_->TimeInMilliseconds();
+  Timestamp now = Timestamp::Millis(now_ms);
+  frames_sent++;
+  int framesize=0;
+  for (auto& packet : packets){
+    framesize+=packet->headers_size()+packet->payload_size()+packet->padding_size();
+  }
+  long pwnd=mpcollector_->MpGetPrimaryWindow();
+  long swnd=mpcollector_->MpGetSecondaryWindow();
+  if(frames_sent>mpcollector_->MpGetFrameRate()){
+    RTC_LOG(INFO)<<"sandysched time:"<<now.ms()<<" count: "<< mpcollector_->MpGetFrameRate() <<" the total bytes: "<<(framesize*8/1000)*mpcollector_->MpGetFrameRate() 
+    <<"kbps P1 max= "<<pwnd*8/1000<<" kbps P2 max= "<<swnd*8/1000<<" kbps";  
+    frames_sent=0;
+  }
+
+  //wndbased
+  //if(( mpcollector_->MpGetScheduler().find("wndbased")!=std::string::npos) && mpcollector_->MpISsecondPathOpen()){
+
+    if(mpcollector_->MpGetPrimaryWindow()>0){
+      if(mpcollector_->MpGetPrimaryWindow()- framesize<0){
+        int wnd=mpcollector_->MpGetSecondaryWindow();
+        wnd-=framesize;
+        mpcollector_->MpSetSecondaryWindow(wnd); 
+        for (auto& packet : packets){
+          packet->subflow_id=2;
+          packet->subflow_seq=sequence_number_s_++;
+          packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
+          packet->SetExtension<sandy>(packet->subflow_id);
+        }
+        RTC_LOG(INFO)<<"sandysched sent the frame with "<<packets.size()<<" RTP packets total= "<<framesize<<" onto p2 space left=" 
+        <<mpcollector_->MpGetSecondaryWindow();
+        mpcollector_->MpSetPrimaryWindow(0);
+      }else{
+        int wnd=mpcollector_->MpGetPrimaryWindow();
+        // wnd-=packet->headers_size()+packet->payload_size()+packet->padding_size();
+        wnd-=framesize;
+        mpcollector_->MpSetPrimaryWindow(wnd);  
+        for (auto& packet : packets){
+          packet->subflow_id=1;
+          packet->subflow_seq=sequence_number_p_++;
+          packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
+          packet->SetExtension<sandy>(packet->subflow_id);    
+          // RTC_LOG(INFO)<<"sandysched sending packet on = "<<packet->subflow_id<<" mp seq= "<<packet->subflow_seq<< 
+          //   " seq= "<<packet->SequenceNumber();
+        }
+        RTC_LOG(INFO)<<"sandysched sent the frame with "<<packets.size()<<" RTP packets total= "<<framesize<<" onto p1 space left=" 
+        <<mpcollector_->MpGetPrimaryWindow();
+      }
+    }else{ 
+    // if(mpcollector_->MpGetSecondaryWindow()>0){
+      // if(mpcollector_->MpGetSecondaryWindow()- framesize<0 && ){  
+      //   int wnd=mpcollector_->MpGetPrimaryWindow();
+      //   wnd-=framesize;
+      //   mpcollector_->MpSetPrimaryWindow(wnd);
+      //   for (auto& packet : packets){
+      //     packet->subflow_id=1;
+      //     packet->subflow_seq=sequence_number_p_++;
+      //     packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
+      //     packet->SetExtension<sandy>(packet->subflow_id);    
+      //   }
+      //   RTC_LOG(INFO)<<"sandysched sent the frame with "<<packets.size()<<" RTP packets total= "<<framesize<<" onto p1 space left=" 
+      //   <<mpcollector_->MpGetPrimaryWindow();
+      //   mpcollector_->MpSetSecondaryWindow(0);
+      // }else{
+        int wnd=mpcollector_->MpGetSecondaryWindow();
+        // wnd-=packet->headers_size()+packet->payload_size()+packet->padding_size();
+        wnd-=framesize;
+        mpcollector_->MpSetPrimaryWindow(wnd); 
+        for (auto& packet : packets){
+          packet->subflow_id=2;
+          packet->subflow_seq=sequence_number_s_++;
+          packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
+          packet->SetExtension<sandy>(packet->subflow_id);
+          // RTC_LOG(INFO)<<"sandysched sending packet on = "<<packet->subflow_id<<" mp seq= "<<packet->subflow_seq<< 
+          //   " seq= "<<packet->SequenceNumber();
+        }
+        RTC_LOG(INFO)<<"sandysched sent the frame with "<<packets.size()<<" RTP packets total= "<<framesize<<" onto p2 space left=" 
+        <<mpcollector_->MpGetSecondaryWindow();
+      // }
+    }
+    // else{
+    //   for (auto& packet : packets){
+    //     packet->subflow_id=1;
+    //     packet->subflow_seq=sequence_number_p_++;
+    //     packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
+    //     packet->SetExtension<sandy>(packet->subflow_id);    
+    //     RTC_LOG(INFO)<<"sandysched sending packet on = "<<packet->subflow_id<<" mp seq= "<<packet->subflow_seq<< 
+    //       " seq= "<<packet->SequenceNumber();
+    //   }
+    //   RTC_LOG(INFO)<<"sandysched sent the frame with "<<packets.size()<<" RTP packets total= "<<framesize<<" both path windows are zero";
+    // }
+    paced_sender_->EnqueuePackets(std::move(packets));//Traffic is only in one single path
+    return;   
+  //}
+    
+  // for (auto& packet : packets) {
+    
+  //   if(( mpcollector_->MpGetScheduler().find("red")!=std::string::npos) && mpcollector_->MpISsecondPathOpen()){
+  //     /*
+  //     sandy: Redudant scheduler means each packet needs to be sent on both path
+  //     */
+  //     // RTC_LOG(INFO)<<"sandystats the scheduler is "<<mpcollector_->MpGetScheduler();
+  //     packet->subflow_id=1;
+  //     packet->subflow_seq=packet->SequenceNumber();
+  //     packet->SetExtension<sandy>(0x1);
+  //     packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
+  //   }
+  //   else{
+  //     if(total_packets_sent%2==0 || 
+  //     !mpcollector_->MpISsecondPathOpen()){//sandy: Set into primary path
+  //       packet->subflow_id=1;
+  //       packet->subflow_seq=sequence_number_p_++;
+  //       if(!mpcollector_->MpISsecondPathOpen() && packet->subflow_seq!=packet->SequenceNumber() && packet->SequenceNumber()>0 ){
+  //         sequence_number_p_=packet->SequenceNumber();
+  //         packet->subflow_seq=packet->SequenceNumber();
+  //       }
+  //       //mpcollector_->pathid=1;//sandy: Need this for splitting traffic in p2p_transport_channel.cc
+  //     }else if(mpcollector_->MpISsecondPathOpen()){
+  //       // RTC_LOG(INFO)<<"sandy setting the secondary path";
+  //       packet->subflow_id=2;
+  //       packet->subflow_seq=sequence_number_s_++;
+  //       //mpcollector_->pathid=2;//sandy: Need this for splitting traffic in p2p_transport_channel.cc
+  //     }
+  //     if (total_packets_sent < 4294967295)  total_packets_sent++;
+  //     else total_packets_sent=1;
+
+  //     //sandy: Now assign packet path
+  //     if (packet->HasExtension<sandy>()){
+  //       if(packet->subflow_id==1)
+  //         packet->SetExtension<sandy>(0x1);
+  //       else 
+  //         packet->SetExtension<sandy>(0x2);
+  //     }else{
+  //       RTC_LOG(INFO)<<"packet do not have pathid(sandy) extension header\n";
+  //     }
+
+  //     //sandy: Now assign the subflow sequence number
+  //     if (packet->HasExtension<MpFlowSeqNum>()){
+  //       packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
+  //     }else{
+  //       RTC_LOG(INFO)<<"packet do not have subflow_seq extension header\n";
+  //     }
+  //   }
+  // }
+  // paced_sender_->EnqueuePackets(std::move(packets));//Traffic is only in one single path
+}
+
 
 void RTPSender::EnqueuePackets(
     std::vector<std::unique_ptr<RtpPacketToSend>> packets) {
@@ -658,6 +859,7 @@ std::unique_ptr<RtpPacketToSend> RTPSender::AllocatePacket() const {
   packet->ReserveExtension<TransmissionOffset>();
   packet->ReserveExtension<TransportSequenceNumber>();
   packet->ReserveExtension<sandy>();//Mp-WebRTC
+  // packet->ReserveExtension<MpFlowID>();//Mp-WebRTC
   packet->ReserveExtension<MpFlowSeqNum>();//Mp-WebRTC
   packet->ReserveExtension<MpTransportSequenceNumber>();
 
@@ -765,7 +967,8 @@ void RTPSender::SetSequenceNumber(uint16_t seq) {
   if (updated_sequence_number) {
     // Sequence number series has been reset to a new value, clear RTP packet
     // history, since any packets there may conflict with new ones.
-    packet_history_->Clear();
+    packet_history_p_->Clear();
+    packet_history_s_->Clear();
   }
 }
 
@@ -976,5 +1179,6 @@ void RTPSender::UpdateHeaderSizes() {
   max_media_packet_header_ =
       rtp_header_length + RtpHeaderExtensionSize(non_volatile_extensions,
                                                  rtp_header_extension_map_);
+  //RTC_LOG(INFO)<<"sandy the maximum RTP header extension size "<<max_media_packet_header_;
 }
 }  // namespace webrtc

@@ -686,8 +686,9 @@ int32_t ModuleRtpRtcpImpl2::SendRTCP(RTCPPacketType packet_type) {//sandy: Reque
   if(!mpcollector_->MpISsecondPathOpen() || ( mpcollector_->MpGetScheduler().find("red")!=std::string::npos)){
     return rtcp_sender_.SendRTCP(GetFeedbackStatePrimary(), packet_type,0,0,1);//sandy: Pli is sent via primary path
   }else{
-    rtcp_sender_.SendRTCP(GetFeedbackStatePrimary(), packet_type,0,0,1);//sandy: Pli is sent via primary path
-    return rtcp_sender_.SendRTCP(GetFeedbackStateSecondary(), packet_type,0,0,2);//sandy: Pli is sent via primary path
+    //sandy: Always send this request via primary path
+    // rtcp_sender_.SendRTCP(GetFeedbackStatePrimary(), packet_type,0,0,1);//sandy: Pli is sent via primary path
+    return rtcp_sender_.SendRTCP(GetFeedbackStateSecondary(), packet_type,0,0,1);//sandy: Pli is sent via primary path
   }
 }
 

@@ -39,7 +39,8 @@
 #include "rtc_base/trace_event.h"
 #include "system_wrappers/include/field_trial.h"
 #include "video/adaptation/video_stream_encoder_resource_manager.h"
-
+#include "api/mp_collector.h"
+#include "api/mp_global.h"
 
 namespace webrtc {
 
@@ -1395,7 +1396,7 @@ void VideoStreamEncoder::EncodeVideoFrame(const VideoFrame& video_frame,
 
   frame_encode_metadata_writer_.OnEncodeStarted(out_frame);
 
-  const int32_t encode_status = encoder_->Encode(out_frame, &next_frame_types_);
+  const int32_t encode_status = encoder_->Encode(out_frame, &next_frame_types_); // ->sandy Actual encoding happends here
   was_encode_called_since_last_initialization_ = true;
 
   if (encode_status < 0) {
@@ -1441,6 +1442,7 @@ void VideoStreamEncoder::SendKeyFrame() {
     encoder_queue_.PostTask([this] { SendKeyFrame(); });
     return;
   }
+  RTC_LOG(INFO)<<"sandy requesting key frame";
   RTC_DCHECK_RUN_ON(&encoder_queue_);
   TRACE_EVENT0("webrtc", "OnKeyFrameRequest");
   RTC_DCHECK(!next_frame_types_.empty());
@@ -1710,6 +1712,7 @@ void VideoStreamEncoder::OnBitrateUpdated(DataRate target_bitrate,
 
   uint32_t framerate_fps = GetInputFramerateFps();
   frame_dropper_.SetRates((target_bitrate.bps() + 500) / 1000, framerate_fps);
+  mpcollector_->MpSetFrameRate(framerate_fps);//sandy: Knowing the framerate
 
   EncoderRateSettings new_rate_settings{
       VideoBitrateAllocation(), static_cast<double>(framerate_fps),
@@ -1803,7 +1806,9 @@ void VideoStreamEncoder::RunPostEncode(const EncodedImage& encoded_image,
   // stats for internal encoders.
   const bool keyframe =
       encoded_image._frameType == VideoFrameType::kVideoFrameKey;
-
+  if(keyframe){
+    RTC_LOG(LS_INFO)<<"sandy: This is key frame "<<clock_->TimeInMilliseconds();
+  }
   if (!frame_size.IsZero()) {
     frame_dropper_.Fill(frame_size.bytes(), !keyframe);
   }

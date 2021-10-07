@@ -130,6 +130,7 @@ void RtcpTransceiver::SendNack(uint32_t ssrc,
 }
 
 void RtcpTransceiver::SendPictureLossIndication(uint32_t ssrc) {
+  RTC_LOG(INFO)<<"sandyofo the OFO increasing and buffer is full ";
   RTC_CHECK(rtcp_transceiver_);
   RtcpTransceiverImpl* ptr = rtcp_transceiver_.get();
   task_queue_->PostTask(

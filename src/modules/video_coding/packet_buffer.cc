@@ -65,6 +65,8 @@ PacketBuffer::PacketBuffer(Clock* clock,
       buffer_(start_buffer_size),
       sps_pps_idr_is_h264_keyframe_(
           field_trial::IsEnabled("WebRTC-SpsPpsIdrIsH264Keyframe")) {
+
+       
   RTC_DCHECK_LE(start_buffer_size, max_buffer_size);
   // Buffer size must always be a power of 2.
   RTC_DCHECK((start_buffer_size & (start_buffer_size - 1)) == 0);
@@ -117,7 +119,7 @@ PacketBuffer::InsertResult PacketBuffer::InsertPacket(
       return result;
     }
   }
-
+  
   int64_t now_ms = clock_->TimeInMilliseconds();
   last_received_packet_ms_ = now_ms;
   if (packet->video_header.frame_type == VideoFrameType::kVideoFrameKey ||
@@ -260,7 +262,8 @@ std::vector<std::unique_ptr<PacketBuffer::Packet>> PacketBuffer::FindFrames(
 
     // If all packets of the frame is continuous, find the first packet of the
     // frame and add all packets of the frame to the returned packets.
-    if (buffer_[index]->is_last_packet_in_frame()) {
+    if (buffer_[index]->is_last_packet_in_frame()) 
+    {
       uint16_t start_seq_num = seq_num;
 
       // Find the start index by searching backward until the packet with

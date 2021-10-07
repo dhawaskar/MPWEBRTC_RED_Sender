@@ -144,6 +144,8 @@ class RtpTransportControllerSend final
                                           int64_t now_ms,int pathid)
       RTC_RUN_ON(task_queue_);
   void PostUpdates(NetworkControlUpdate update,NetworkControlUpdate update2) RTC_RUN_ON(task_queue_);
+  int MpFindBestPath(int64_t rtt1,int64_t rtt2,double loss1,double loss2,int64_t rate1,int64_t rate2) RTC_RUN_ON(task_queue_);
+  void MpFindRatio(int64_t rtt1,int64_t rtt2,int64_t rate1,int64_t rate2,int pathid) RTC_RUN_ON(task_queue_);
   void UpdateControlState() RTC_RUN_ON(task_queue_);
   RtpPacketPacer* pacer();
   const RtpPacketPacer* pacer() const;
@@ -215,8 +217,8 @@ class RtpTransportControllerSend final
   absl::optional<DataSize> sp_congestion_window;
   absl::optional<PacerConfig> pp_pacer_config;
   absl::optional<PacerConfig> sp_pacer_config;
-  absl::optional<TargetTransferRate> pp_target_rate;
-  absl::optional<TargetTransferRate> sp_target_rate;
+  absl::optional<TargetTransferRate> pp_target_rate RTC_GUARDED_BY(task_queue_);
+  absl::optional<TargetTransferRate> sp_target_rate RTC_GUARDED_BY(task_queue_);
 
 
   // Protected by internal locks.

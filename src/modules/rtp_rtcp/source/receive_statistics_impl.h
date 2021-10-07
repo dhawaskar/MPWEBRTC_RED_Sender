@@ -22,26 +22,16 @@
 #include "rtc_base/rate_statistics.h"
 #include "rtc_base/thread_annotations.h"
 
-uint32_t prev_primary_seq=0 ;
-uint32_t prev_secondary_seq =0;
+// uint32_t prev_primary_seq=0 ;
+// uint32_t prev_secondary_seq =0;
 // uint32_t primary_seq=0 ;
 // uint32_t secondary_seq =0;
-int64_t received_seq_max_primary =-1;
-int64_t received_seq_max_secondary =-1;
-int64_t received_seq_max_primary_last =-1;
-int64_t received_seq_max_secondary_last =-1;
-int32_t cumulative_loss_primary =0;
-int32_t cumulative_loss_secondary =0;
-int32_t cumulative_loss_primary_last =0;
-int32_t cumulative_loss_secondary_last =0; 
-uint32_t p_packets=0;
-uint32_t s_packets=0;
-int64_t received_seq_first_primary=-1;
-int64_t received_seq_first_secondary=-1;
-int64_t last_receive_time_ms_p =0;
-uint32_t last_received_timestamp_p =0;
-int64_t last_receive_time_ms_s =0;
-uint32_t last_received_timestamp_s =0;
+
+
+// uint32_t p_packets=0;
+// uint32_t s_packets=0;
+
+
 // uint32_t jitter_q4_p =0;
 // uint32_t jitter_q4_s =0;
 // int64_t received_seq_first_secondary=-1;
@@ -90,6 +80,14 @@ RtcpStatistics MpSecondaryCalculateRtcpStatistics()
       RTC_EXCLUSIVE_LOCKS_REQUIRED(stream_lock_);
   // Updates StreamStatistician for out of order packets.
   // Returns true if packet considered to be out of order.
+  bool MpPrimaryUpdateOutOfOrder(const RtpPacketReceived& packet,
+                        int64_t sequence_number,
+                        int64_t now_ms)
+      RTC_EXCLUSIVE_LOCKS_REQUIRED(stream_lock_);
+  bool MpSecondaryUpdateOutOfOrder(const RtpPacketReceived& packet,
+                        int64_t sequence_number,
+                        int64_t now_ms)
+      RTC_EXCLUSIVE_LOCKS_REQUIRED(stream_lock_);
   bool UpdateOutOfOrder(const RtpPacketReceived& packet,
                         int64_t sequence_number,
                         int64_t now_ms)
@@ -97,6 +95,12 @@ RtcpStatistics MpSecondaryCalculateRtcpStatistics()
   // Checks if this StreamStatistician received any rtp packets.
   bool ReceivedRtpPacket() const RTC_EXCLUSIVE_LOCKS_REQUIRED(stream_lock_) {
     return received_seq_first_ >= 0;
+  }
+  bool MpPrimaryReceivedRtpPacket() const RTC_EXCLUSIVE_LOCKS_REQUIRED(stream_lock_) {
+    return received_seq_first_primary >= 0;
+  }
+  bool MpSecondaryReceivedRtpPacket() const RTC_EXCLUSIVE_LOCKS_REQUIRED(stream_lock_) {
+    return received_seq_first_secondary >= 0;
   }
 
   const uint32_t ssrc_;
@@ -114,6 +118,10 @@ RtcpStatistics MpSecondaryCalculateRtcpStatistics()
   // Cumulative loss according to RFC 3550, which may be negative (and often is,
   // if packets are reordered and there are non-RTX retransmissions).
   int32_t cumulative_loss_ RTC_GUARDED_BY(&stream_lock_);
+  int32_t cumulative_loss_primary RTC_GUARDED_BY(&stream_lock_);
+int32_t cumulative_loss_secondary RTC_GUARDED_BY(&stream_lock_);
+// int32_t cumulative_loss_primary_last RTC_GUARDED_BY(&stream_lock_);
+// int32_t cumulative_loss_secondary_last RTC_GUARDED_BY(&stream_lock_); 
   // Offset added to outgoing rtcp reports, to make ensure that the reported
   // cumulative loss is non-negative. Reports with negative values confuse some
   // senders, in particular, our own loss-based bandwidth estimator.
@@ -123,10 +131,21 @@ RtcpStatistics MpSecondaryCalculateRtcpStatistics()
 
 
   int64_t last_receive_time_ms_ RTC_GUARDED_BY(&stream_lock_);
+  int64_t last_receive_time_ms_primary RTC_GUARDED_BY(&stream_lock_);
+  int64_t last_receive_time_ms_secondary RTC_GUARDED_BY(&stream_lock_);
+
   uint32_t last_received_timestamp_ RTC_GUARDED_BY(&stream_lock_);
+  uint32_t last_received_timestamp_primary RTC_GUARDED_BY(&stream_lock_);
+  uint32_t last_received_timestamp_secondary RTC_GUARDED_BY(&stream_lock_);
+
   SequenceNumberUnwrapper seq_unwrapper_ RTC_GUARDED_BY(&stream_lock_);
   int64_t received_seq_first_ RTC_GUARDED_BY(&stream_lock_);
+  int64_t received_seq_first_primary RTC_GUARDED_BY(&stream_lock_);
+  int64_t received_seq_first_secondary RTC_GUARDED_BY(&stream_lock_);
   int64_t received_seq_max_ RTC_GUARDED_BY(&stream_lock_);
+  int64_t received_seq_max_primary RTC_GUARDED_BY(&stream_lock_);
+int64_t received_seq_max_secondary RTC_GUARDED_BY(&stream_lock_);
+
  
   // Assume that the other side restarted when there are two sequential packets
   // with large jump from received_seq_max_.
@@ -138,6 +157,10 @@ RtcpStatistics MpSecondaryCalculateRtcpStatistics()
   absl::optional<uint16_t> primary_received_seq_out_of_order_
       RTC_GUARDED_BY(&stream_lock_);
 
+  absl::optional<uint16_t> secondary_received_seq_out_of_order_
+      RTC_GUARDED_BY(&stream_lock_);
+
+
 
 
   // Current counter values.
@@ -145,11 +168,15 @@ RtcpStatistics MpSecondaryCalculateRtcpStatistics()
 
   // Counter values when we sent the last report.
   int32_t last_report_cumulative_loss_ RTC_GUARDED_BY(&stream_lock_);
+  int32_t last_report_cumulative_loss_primary RTC_GUARDED_BY(&stream_lock_);
+  int32_t last_report_cumulative_loss_secondary RTC_GUARDED_BY(&stream_lock_);
   int64_t last_report_seq_max_ RTC_GUARDED_BY(&stream_lock_);
+  int64_t last_report_seq_max_primary RTC_GUARDED_BY(&stream_lock_);
+  int64_t last_report_seq_max_secondary RTC_GUARDED_BY(&stream_lock_);
    //sandy
   //All sandy code declcaration
-  int64_t primary_seq RTC_GUARDED_BY(&stream_lock_);
-  int64_t secondary_seq RTC_GUARDED_BY(&stream_lock_);
+  // int64_t primary_seq RTC_GUARDED_BY(&stream_lock_);
+  // int64_t secondary_seq RTC_GUARDED_BY(&stream_lock_);
   
   
   
