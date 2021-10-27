@@ -261,7 +261,7 @@ void RtpSenderEgress::SendPacket(RtpPacketToSend* packet,
       packet_history_p_->MarkPacketAsSent(*packet->retransmitted_sequence_number());
       // packet_history_s_->MarkPacketAsSent(*packet->retransmitted_sequence_number());
     }
-    else if(packet->subflow_id!=2)
+    else if(packet->subflow_id<=1 || packet->subflow_id==3)
       packet_history_p_->MarkPacketAsSent(*packet->retransmitted_sequence_number());
     else
       packet_history_s_->MarkPacketAsSent(*packet->retransmitted_sequence_number());
@@ -272,7 +272,7 @@ void RtpSenderEgress::SendPacket(RtpPacketToSend* packet,
     UpdateRtpStats(*packet);
     media_has_been_sent_ = true;
   }
-  RTC_LOG(INFO)<<"sandyofo sent the packet on path "<<packet->subflow_id<< "seq: "<<packet->SequenceNumber();
+  // RTC_LOG(INFO)<<"sandyofo sent the packet on path "<<packet->subflow_id<< "seq: "<<packet->SequenceNumber();
 }
 
 void RtpSenderEgress::ProcessBitrateAndNotifyObservers() {//sandy: called in rtp_rtcp_impl2.cc
@@ -427,13 +427,11 @@ void RtpSenderEgress::AddPacketToTransportFeedback(
       // packet_info.pathid=2;
       // transport_feedback_observer_->OnAddPacket(packet_info);
     }
-    else if(!packet.subflow_id){
-      packet_info.pathid=1;//sandy If the subflow id is not set, use primary path
-      transport_feedback_observer_->OnAddPacket(packet_info);
-    }else{
-      packet_info.pathid=packet.subflow_id;//sandy
-      transport_feedback_observer_->OnAddPacket(packet_info);
-    }
+    if(packet.subflow_id==4 || packet.subflow_id<=1)
+      packet_info.pathid=1;//sandy
+    else
+      packet_info.pathid=2;//sandy
+    transport_feedback_observer_->OnAddPacket(packet_info);
     
   }
 }

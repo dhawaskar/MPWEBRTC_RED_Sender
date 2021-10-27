@@ -376,7 +376,15 @@ int32_t RTPSender::ReSendPacketPrimary(uint16_t packet_id,int pathid) {
                   stored_packet.subflow_seq);//sandy: I do not change sequence to mpflowseq 
               //sandy: Assign the subflow id and subflow seq from history
               retransmit_packet->subflow_seq=stored_packet.subflow_seq;
-              retransmit_packet->subflow_id=stored_packet.subflow_id;
+              retransmit_packet->SetExtension<MpFlowSeqNum>(stored_packet.subflow_seq);
+
+              if(mpcollector_->MpGetBestPathId()==2){
+                retransmit_packet->subflow_id=3;
+                retransmit_packet->SetExtension<sandy>(3);
+              }else{
+                retransmit_packet->subflow_id=1;
+                retransmit_packet->SetExtension<sandy>(1);
+              }
             }
             return retransmit_packet;
           });
@@ -426,7 +434,14 @@ int32_t RTPSender::ReSendPacketSecondary(uint16_t packet_id,int pathid) {
                   stored_packet.subflow_seq);//sandy: I do not change sequence to mpflowseq 
               //sandy: Assign the subflow id and subflow seq from history
               retransmit_packet->subflow_seq=stored_packet.subflow_seq;
-              retransmit_packet->subflow_id=stored_packet.subflow_id;
+              retransmit_packet->SetExtension<MpFlowSeqNum>(stored_packet.subflow_seq);
+              if(mpcollector_->MpGetBestPathId()==1){
+                retransmit_packet->SetExtension<sandy>(4);
+                retransmit_packet->subflow_id=4;
+              }else{
+                retransmit_packet->SetExtension<sandy>(2);
+                retransmit_packet->subflow_id=2;
+              }
             }
             return retransmit_packet;
           });
@@ -664,60 +679,30 @@ void RTPSender::MPTrafficSplitImplementation(
   std::vector<std::unique_ptr<RtpPacketToSend>> packets,int framesize,bool keyframe,bool audio){
 
   //window based scheduler
-  if(mpcollector_->MpGetScheduler().find("window")!=std::string::npos){
-    if( mpcollector_->MpISsecondPathOpen() ){
-      RTC_LOG(INFO)<<"sandy sending non key frame packets";
-      // if( ((mpcollector_->MpGetPrimaryWindow()- framesize)<=0) &&  
-      //   mpcollector_->MpGetSecondaryWindow()>0 && !keyframe){
-      //   int wnd=mpcollector_->MpGetSecondaryWindow();
-      //   wnd-=framesize;
-      //   mpcollector_->MpSetSecondaryWindow(wnd); 
-      //   for (auto& packet : packets){
-      //     packet->subflow_id=2;
-      //     packet->subflow_seq=sequence_number_s_++;
-      //     packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
-      //     packet->SetExtension<sandy>(packet->subflow_id);
-      //   }
-      //   RTC_LOG(INFO)<<"sandysched sent the frame with "<<packets.size()<<" RTP packets total= "<<framesize<<" onto p2 space left=" 
-      //   <<mpcollector_->MpGetSecondaryWindow();
-      //   mpcollector_->MpSetPrimaryWindow(0);
-      // }else{
-      //   // if(mpcollector_->MpGetSecondaryWindow()- framesize<=0 ){
-      //   //   mpcollector_->MpSetSecondaryWindow(0);
-      //   // }
-      //   int wnd=mpcollector_->MpGetPrimaryWindow();
-      //   // wnd-=packet->headers_size()+packet->payload_size()+packet->padding_size();
-      //   wnd-=framesize;
-      //   mpcollector_->MpSetPrimaryWindow(wnd);  
-      //   for (auto& packet : packets){
-      //     packet->subflow_id=1;
-      //     packet->subflow_seq=sequence_number_p_++;
-      //     packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
-      //     packet->SetExtension<sandy>(packet->subflow_id);    
-      //     // RTC_LOG(INFO)<<"sandysched sending packet on = "<<packet->subflow_id<<" mp seq= "<<packet->subflow_seq<< 
-      //     //   " seq= "<<packet->SequenceNumber();
-      //   }
-      //   RTC_LOG(INFO)<<"sandysched sent the frame with "<<packets.size()<<" RTP packets total= "<<framesize<<" onto p1 space left=" 
-      //   <<mpcollector_->MpGetPrimaryWindow();
-      // }
-      
-      int split=packets.size()/2;
-      if(split<=0){
-        split=1;
-      }
-      int ratio_count=0;
-      double mpratio=0;
-      if(mpcollector_->MpGetRatio()==0||mpcollector_->MpGetRatio()==1){
-        if(keyframe){
-          RTC_LOG(INFO)<<"sandy sending key frame";
-          for (auto& packet : packets){
-            packet->subflow_id=1;
-            packet->subflow_seq=sequence_number_p_++;
-            packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
-            packet->SetExtension<sandy>(packet->subflow_id);
-          }
+  if((mpcollector_->MpGetScheduler().find("window")!=std::string::npos)&&mpcollector_->MpISsecondPathOpen()){
+    if(keyframe){
+      RTC_LOG(INFO)<<"sandy sending key frame";
+      for (auto& packet : packets){
+        if(mpcollector_->MpGetBestPathId()==1){
+          packet->subflow_id=1;
+          packet->subflow_seq=sequence_number_p_++;
+          packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
+          packet->SetExtension<sandy>(packet->subflow_id);
         }else{
-        RTC_LOG(INFO)<<"sandyratio: P1:P2 "<<split<<":"<<split<<" ratio = "<<mpcollector_->MpGetRatio()<<" total "<<packets.size();
+          packet->subflow_id=2;
+          packet->subflow_seq=sequence_number_s_++;
+          packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
+          packet->SetExtension<sandy>(packet->subflow_id);
+        }
+      }
+    }else{
+      RTC_LOG(INFO)<<"sandy sending non key frame packets";      
+      int split=packets.size()/2;
+      if(split<=0)
+        split=1;
+      int ratio_count=0;
+      if(mpcollector_->MpGetRatio()==0||mpcollector_->MpGetRatio()==1){
+        RTC_LOG(INFO)<<"sandyratio: P1:P2 split "<<split<<" ratio = "<<mpcollector_->MpGetRatio()<<" total "<<packets.size();
         for (auto& packet : packets){
           if(ratio_count<=split){
             packet->subflow_id=2;
@@ -731,118 +716,92 @@ void RTPSender::MPTrafficSplitImplementation(
             packet->SetExtension<sandy>(packet->subflow_id);
           }
           ratio_count++;
-        }}
+        }
       }else{
+        double mpratio=0;
         mpratio=mpcollector_->MpGetRatio();
-        split=((double)mpratio/(double)(1+mpratio))*packets.size();
-        if(mpratio>0.0 && split==0)
+        if(packets.size()==1){
           split=1;
+        }else{
+          split=((double)mpratio/(double)(1+mpratio))*packets.size();
+        }
         int p1=split;//Sandy:Best path share
         int p2=(packets.size()-split);//sandy:Worst path share
+        if((packets.size()>2&& p2==0) || mpcollector_->MpGetLossBasedPathId()){
+          p1=packets.size()-1;
+          p2=1;
+        }
         RTC_LOG(INFO)<<"sandyratio: Best:Worst "<<p1<<":"<<p2<<" ratio = "<<mpcollector_->MpGetRatio()<<" total "<<packets.size();
-        if(keyframe){
-          RTC_LOG(INFO)<<"sandy sending key frame";
+        if(mpcollector_->MpGetBestPathId()==1){
+          ratio_count=0;
           for (auto& packet : packets){
-            packet->subflow_id=1;
-            packet->subflow_seq=sequence_number_p_++;
-            packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
-            packet->SetExtension<sandy>(packet->subflow_id);
+            if(ratio_count<=p2){
+              packet->subflow_id=2;
+              packet->subflow_seq=sequence_number_s_++;
+              packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
+              packet->SetExtension<sandy>(packet->subflow_id);
+            }else{
+              packet->subflow_id=1;
+              packet->subflow_seq=sequence_number_p_++;
+              packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
+              packet->SetExtension<sandy>(packet->subflow_id);
+            }  
+            ratio_count++;
           }
         }else{
-        for (auto& packet : packets){
-          if(ratio_count<=p2 && mpcollector_->MpGetBestPathId()!=2){
-            packet->subflow_id=2;
-            packet->subflow_seq=sequence_number_s_++;
-            packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
-            packet->SetExtension<sandy>(packet->subflow_id);
-          } else if(mpcollector_->MpGetBestPathId()==1){
-            packet->subflow_id=1;
-            packet->subflow_seq=sequence_number_p_++;
-            packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
-            packet->SetExtension<sandy>(packet->subflow_id);
-          }else if(ratio_count<=p2 && mpcollector_->MpGetBestPathId()!=1){
-            packet->subflow_id=1;
-            packet->subflow_seq=sequence_number_p_++;
-            packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
-            packet->SetExtension<sandy>(packet->subflow_id);
-          }else{
-            packet->subflow_id=2;
-            packet->subflow_seq=sequence_number_s_++;
-            packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
-            packet->SetExtension<sandy>(packet->subflow_id);
+          ratio_count=0;
+          for (auto& packet : packets){
+            if(ratio_count<=p2){
+              packet->subflow_id=1;
+              packet->subflow_seq=sequence_number_p_++;
+              packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
+              packet->SetExtension<sandy>(packet->subflow_id);
+            }else{
+              packet->subflow_id=2;
+              packet->subflow_seq=sequence_number_s_++;
+              packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
+              packet->SetExtension<sandy>(packet->subflow_id);
+            }
+            ratio_count++;
           }
-          ratio_count++;
-        }}
+        }
       }
-
-    }else{ 
-      // int wnd=mpcollector_->MpGetPrimaryWindow();
-      // // wnd-=packet->headers_size()+packet->payload_size()+packet->padding_size();
-      // wnd-=framesize;
-      // mpcollector_->MpSetPrimaryWindow(wnd);  
-      for (auto& packet : packets){
-        packet->subflow_id=1;
-        packet->subflow_seq=sequence_number_p_++;
-        packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
-        packet->SetExtension<sandy>(packet->subflow_id);    
-          // RTC_LOG(INFO)<<"sandysched sending packet on = "<<packet->subflow_id<<" mp seq= "<<packet->subflow_seq<< 
-          //   " seq= "<<packet->SequenceNumber();
-      }
-      RTC_LOG(INFO)<<"sandysched no path choosen "<<packets.size()<<" RTP packets total= "<<framesize<<" onto p1 space left=" 
-        <<mpcollector_->MpGetPrimaryWindow();
     }
-}else{
-  for (auto& packet : packets) {
-    if(( mpcollector_->MpGetScheduler().find("red")!=std::string::npos) && mpcollector_->MpISsecondPathOpen()){
-      /*
-      sandy: Redudant scheduler means each packet needs to be sent on both path
-      */
-      // RTC_LOG(INFO)<<"sandystats the scheduler is "<<mpcollector_->MpGetScheduler();
+  }else if(( mpcollector_->MpGetScheduler().find("red")!=std::string::npos) && mpcollector_->MpISsecondPathOpen()) {
+    for (auto& packet : packets) {
       packet->subflow_id=1;
       packet->subflow_seq=packet->SequenceNumber();
       packet->SetExtension<sandy>(0x1);
       packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
     }
-    else{
-      if(total_packets_sent%2==0 || 
-      !mpcollector_->MpISsecondPathOpen()){//sandy: Set into primary path
+  }
+  else{
+    for (auto& packet : packets) {
+      if(total_packets_sent%2==0 || !mpcollector_->MpISsecondPathOpen()){//sandy: Set into primary path
         packet->subflow_id=1;
         packet->subflow_seq=sequence_number_p_++;
         if(!mpcollector_->MpISsecondPathOpen() && packet->subflow_seq!=packet->SequenceNumber() && packet->SequenceNumber()>0 ){
           sequence_number_p_=packet->SequenceNumber();
           packet->subflow_seq=packet->SequenceNumber();
         }
+        packet->SetExtension<sandy>(0x1);
+        packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
         //mpcollector_->pathid=1;//sandy: Need this for splitting traffic in p2p_transport_channel.cc
       }else if(mpcollector_->MpISsecondPathOpen()){
         // RTC_LOG(INFO)<<"sandy setting the secondary path";
         packet->subflow_id=2;
         packet->subflow_seq=sequence_number_s_++;
         //mpcollector_->pathid=2;//sandy: Need this for splitting traffic in p2p_transport_channel.cc
-      }
-      if (total_packets_sent < 4294967295)  total_packets_sent++;
-      else total_packets_sent=1;
-
-      //sandy: Now assign packet path
-      if (packet->HasExtension<sandy>()){
-        if(packet->subflow_id==1)
-          packet->SetExtension<sandy>(0x1);
-        else 
-          packet->SetExtension<sandy>(0x2);
-      }else{
-        RTC_LOG(INFO)<<"packet do not have pathid(sandy) extension header\n";
-      }
-
-      //sandy: Now assign the subflow sequence number
-      if (packet->HasExtension<MpFlowSeqNum>()){
+        packet->SetExtension<sandy>(0x2);
         packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
-      }else{
-        RTC_LOG(INFO)<<"packet do not have subflow_seq extension header\n";
       }
-    }
+      if (total_packets_sent < 4294967295)  
+        total_packets_sent++;
+      else total_packets_sent=1;
+    }    
   }
-}
-paced_sender_->EnqueuePackets(std::move(packets));//Traffic is only in one single path
-return;  
+  paced_sender_->EnqueuePackets(std::move(packets));//Traffic is only in one single path
+  return;  
 }
 
 

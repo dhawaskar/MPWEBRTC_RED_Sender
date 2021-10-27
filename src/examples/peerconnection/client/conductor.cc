@@ -73,8 +73,8 @@ class CapturerTrackSource : public webrtc::VideoTrackSource {
   static rtc::scoped_refptr<CapturerTrackSource> Create() {
     // const size_t kWidth = 4096;//1920
     // const size_t kHeight = 2160;//1080
-    const size_t kWidth = 1920;//1920
-    const size_t kHeight = 1080;//1080
+    const size_t kWidth = 960;//1920
+    const size_t kHeight = 540;//1080
     // const size_t kWidth = 640;//2048;//1920
     // const size_t kHeight = 480;//;//1080
     const size_t kFps = 30;
@@ -456,15 +456,15 @@ void Conductor::ConnectToPeer(int peer_id) {
     main_wnd_->MessageBox("Error", "Failed to initialize PeerConnection", true);
   }*/
   if (InitializePeerConnection()) {
-    // using RTCOfferAnswerOptions =  webrtc::PeerConnectionInterface::RTCOfferAnswerOptions;
-    // RTCOfferAnswerOptions sandy_options;
-    // sandy_options.offer_to_receive_video=0;
-    // sandy_options.offer_to_receive_audio=0;
-    // sandy_options.raw_packetization_for_video=true;
+    using RTCOfferAnswerOptions =  webrtc::PeerConnectionInterface::RTCOfferAnswerOptions;
+    RTCOfferAnswerOptions sandy_options;
+    sandy_options.offer_to_receive_video=0;
+    sandy_options.offer_to_receive_audio=0;
+    sandy_options.raw_packetization_for_video=true;
     peer_id_ = peer_id;
     peer_connection_->CreateOffer(
-        // this, sandy_options);//sandy: Adding options to turn off video and audio
-        this, webrtc::PeerConnectionInterface::RTCOfferAnswerOptions());
+        this, sandy_options);//sandy: Adding options to turn off video and audio
+        // this, webrtc::PeerConnectionInterface::RTCOfferAnswerOptions());
   } else {
     main_wnd_->MessageBox("Error", "Failed to initialize PeerConnection", true);
   }

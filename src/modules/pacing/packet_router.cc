@@ -166,11 +166,11 @@ void PacketRouter::SendPacket(std::unique_ptr<RtpPacketToSend> packet,
     if(( mpcollector_->MpGetScheduler().find("red")!=std::string::npos) && mpcollector_->MpISsecondPathOpen()){
       packet->SetExtension<MpTransportSequenceNumber>((transport_seq_) & 0xFFFF);
     }
-    else if(packet->subflow_id!=2 ){
+    else if(packet->subflow_id<=1 || packet->subflow_id==4 ){
       packet->SetExtension<MpTransportSequenceNumber>((++transport_seq_p_) & 0xFFFF);
       // RTC_LOG(INFO)<<"sandystats sending the packet in primary path seq="<<(transport_seq_&0xFFFF)<<" mp= "<< 
       // ((transport_seq_p_)&0xFFFF);
-    }else if (packet->subflow_id==2){
+    }else if (packet->subflow_id==2 || packet->subflow_id==3){
       packet->SetExtension<MpTransportSequenceNumber>((++transport_seq_s_) & 0xFFFF);
       // RTC_LOG(INFO)<<"sandystats sending the packet in secondary path seq="<<transport_seq_<<" mp= "<< 
       // ((transport_seq_s_)&0xFFFF);

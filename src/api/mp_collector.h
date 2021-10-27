@@ -77,7 +77,12 @@ public:
 	int ppath_lock_=0;
 	int best_pathid_=0;
 	double ratio_=0;
+	int loss_pathid_=0;
 	std::string scheduler_="rr";
+	int rtt1_=0;
+	int rtt2_=0;
+	double loss1_=0;
+	double loss2_=0;
 
 	void MpStoreCandidate (std::string ip, int port,uint32_t priority,std::string transport_name, 
 		uint16_t network_id,uint16_t network_cost,std::string protocol) ;
@@ -103,6 +108,15 @@ public:
 	void MpSetBestPathId(int pathid){ 
 		best_pathid_=pathid;
 	}
+
+
+	int MpGetLossBasedPathId(){//If MP-webRTC is enabled
+		return loss_pathid_;
+	}
+	void MpSetLossBasedPathId(int losspathid){ 
+		loss_pathid_=losspathid;
+	}
+
 	double MpGetRatio(){//If MP-webRTC is enabled
 		return ratio_;
 	}
@@ -152,6 +166,32 @@ public:
 	}
 	uint32_t MpGetFrameRate(){
 		return fps_;
+	}
+
+	//sandy  : Path properties
+	int MpGetRTT1(){//If MP-webRTC is enabled
+		return rtt1_;
+	}
+	void MpSetRTT1(int rtt1){ 
+		rtt1_=rtt1;
+	}
+	int MpGetRTT2(){//If MP-webRTC is enabled
+		return rtt2_;
+	}
+	void MpSetRTT2(int rtt2){ 
+		rtt2_=rtt2;
+	}
+	double MpGetLoss1(){//If MP-webRTC is enabled
+		return loss1_;
+	}
+	void MpSetLoss1(double loss1){ 
+		loss1_=loss1;
+	}
+	double MpGetLoss2(){//If MP-webRTC is enabled
+		return loss2_;
+	}
+	void MpSetLoss2(double loss2){ 
+		loss2_=loss2;
 	}
 
 };

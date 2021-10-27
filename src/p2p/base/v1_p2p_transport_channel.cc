@@ -37,8 +37,6 @@
 #include "api/mp_collector.h"
 #include "api/mp_global.h"
 
-int64_t mpreference_time=0;
-int64_t mpprint_time=0;
 int sandy_connection_wait=50; 
 std::vector<cricket::Connection *> sandy_writable_nonsendable;//connection that cannot talk to each other
 
@@ -1532,11 +1530,6 @@ int P2PTransportChannel::SendPacket(const char* data,
                                     size_t len,
                                     const rtc::PacketOptions& options,
                                     int flags) {
-  int64_t now = rtc::TimeMillis();
-  if(mpreference_time==0)
-    mpreference_time=now;
-  if(mpprint_time==0)
-    mpreference_time=now;
   RTC_DCHECK_RUN_ON(network_thread_);
   if(options.packet_id<0){
     RTC_DCHECK(options.packet_id);
@@ -1569,10 +1562,11 @@ int P2PTransportChannel::SendPacket(const char* data,
       
         second_connection_= connection;
 
-        // if (!ReadyToSend(second_connection_)) {
-        //   RTC_LOG(INFO)<<"sandyconnection this connection is writable but cannot send data";
-        //   sandy_writable_nonsendable.push_back(connection);
-        // }else{
+        if (!ReadyToSend(second_connection_)) {
+          RTC_LOG(INFO)<<"sandyconnection this connection is writable but cannot send data";
+          // sandy_writable_nonsendable.push_back(connection);
+        }
+        // else{
         mpcollector_->MpSetSecondPath(1);          
         //}
       }
@@ -1622,10 +1616,7 @@ int P2PTransportChannel::SendPacket(const char* data,
       error_ = second_connection_->GetError();
     }
   }
-  else if(options.pathid<=1 || !second_connection_ || options.pathid==4){
-    if(options.pathid==4){
-      RTC_LOG(INFO)<<"sandyrtx retranmission of secondary path packets onto primary";
-    }
+  else if(options.pathid!=2 || !second_connection_){
     modified_options.pathid=1;//sandy: Copy the pathid
     sent = selected_connection_->Send(data, len, modified_options);
     if (sent <= 0) {
@@ -1633,26 +1624,14 @@ int P2PTransportChannel::SendPacket(const char* data,
        error_ = selected_connection_->GetError();
     }
   }
-  else if(second_connection_ && (options.pathid==2||options.pathid==3) ){
-    if(options.pathid==3){
-      RTC_LOG(INFO)<<"sandyrtx retranmission of primary path packets onto secondary";
-    }
-    modified_options.pathid=2;
-    sent=second_connection_->Send(data, len, modified_options);
-    if (sent <= 0) {
-      RTC_DCHECK(sent < 0);
-      error_ = second_connection_->GetError();
-    }
+  else if(second_connection_ && options.pathid==2){
+      modified_options.pathid=2;
+      sent=second_connection_->Send(data, len, modified_options);
+      if (sent <= 0) {
+        RTC_DCHECK(sent < 0);
+        error_ = second_connection_->GetError();
+      }
   } 
-
-
-  //sandy: Get the stats
-  if(now- mpprint_time>1000 && mpcollector_->MpISsecondPathOpen()){
-    RTC_LOG(INFO)<<"MpWebRTCStats "<<(selected_connection_->stats().sent_bytes_second*8)/1000<<" "<<(second_connection_->stats().sent_bytes_second*8)/1000<<" "<< 
-    mpcollector_->MpGetRTT1()<<" "<<mpcollector_->MpGetRTT2()<<" "<<mpcollector_->MpGetLoss1()<<" "<<mpcollector_->MpGetLoss2();
-    mpprint_time=now;
-  }
-
   return sent;
 }
 

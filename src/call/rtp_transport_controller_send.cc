@@ -800,61 +800,55 @@ void RtpTransportControllerSend::UpdateStreamsConfig() {
 
 //sandy: Function to detect best path. The path with highest bitrate,lowest RTT and loss
 int RtpTransportControllerSend::MpFindBestPath(int64_t rtt1,int64_t rtt2,double loss1,double loss2,int64_t rate1,int64_t rate2){
-  rate1*=1000;
-  rate2*=1000;
-  double P1alpha=0;
-  double P2alpha=0;
-  P1alpha=rate1;
-  if(loss1>1.0)
-    P1alpha/=loss1;
-  else if(loss1 >0.0)
-    P1alpha*=loss1;
-  if(rtt1>0)
-    P1alpha/=rtt1;
+ 
 
-  P2alpha=rate2;
-  if(loss2>1.0)
-    P2alpha/=loss2;
-  else if(loss2 >0.0)
-    P2alpha*=loss2;
-  if(rtt2>0)
-    P2alpha/=rtt2;
-  
-  if(P1alpha>P2alpha){
-    RTC_LOG(INFO)<<"sandyratio best path=p1 P1:P2 "<<P1alpha<<":"<<P2alpha<<" rates  "<<rate1<<":"<<rate2<<" RTT "<<rtt1<<" : "<<rtt2<<" Loss "<<loss1<< 
-    " : "<<loss2;
+  mpcollector_->MpSetRTT1(rtt1);
+  mpcollector_->MpSetRTT2(rtt2);
+  mpcollector_->MpSetLoss1(loss1);
+  mpcollector_->MpSetLoss2(loss2);
+  double P1time=0;
+  double P2time=0;
+  int bestpath=0;
+
+  if(rtt1==0 || rtt2==0){
     return 1;
   }
-  else {
-    RTC_LOG(INFO)<<"sandyratio best path=p2 P1:P2 "<<P1alpha<<":"<<P2alpha<<" rates  "<<rate1<<":"<<rate2<<" RTT "<<rtt1<<" : "<<rtt2<<" Loss "<<loss1<< 
-    " : "<<loss2;
-    return 2;
+
+  //sandy: Find the completion time
+  P1time= (double(1/rate1))+double(rtt1/1000);
+  P2time= (double(1/rate2))+double(rtt2/1000);
+  mpcollector_->MpSetLossBasedPathId(0);
+  if(P1time<=P2time)
+    bestpath=1;
+  else
+    bestpath=2;
+
+  if(loss1>=0.1 && loss2>=0.1){
+    if(loss1>loss2)
+      bestpath=2;
+    else
+      bestpath=1;
+  }else if(loss1>=0.1 && loss1>loss2){
+    bestpath=2;
+    mpcollector_->MpSetLossBasedPathId(bestpath);
+  }else if(loss2>=0.1 && loss2>loss1){
+    bestpath=1;
+    mpcollector_->MpSetLossBasedPathId(bestpath);
   }
+  RTC_LOG(INFO)<<"sandyratio: bestpath= "<<bestpath;
+  return bestpath;
 }
 
 void RtpTransportControllerSend::MpFindRatio(int64_t rtt1,int64_t rtt2,int64_t rate1,int64_t rate2,int pathid){
   double mpratio;
-  rate1*=1000;
-  rate2*=1000;
-  if(pathid==1){
-    if((rate2==rate1 && rtt1==rtt2) || (rtt1==0 && rtt2==0))
-      mpratio=1;
-    else{
-      if(rtt1==0||rtt2==0)
-        mpratio=rate1/rate2;  
-      else 
-        mpratio=((double)rate1/rtt1)/((double)rate2/rtt2);
-    }
-  }else{
-    if((rate2==rate1 && rtt1==rtt2) || (rtt1==0 && rtt2==0))
-      mpratio=1;
-    else{
-      if(rtt1==0||rtt2==0)
-        mpratio=rate2/rate1;  
-      else 
-        mpratio=((double)rate2/rtt2)/((double)rate1/rtt1);
-    }
+  if(rtt1==0 || rtt2==0){
+    mpratio=1;
   }
+  
+  if(pathid==1)
+    mpratio=double(double (rate1)/double(rate2));
+  else
+    mpratio=double(double (rate2)/double(rate1));
 
   RTC_LOG(INFO)<<"sandyratio: the scheduler ratio= "<<mpratio<<" P1 Rate "<<rate1<<" bps "<<" P2 Rate "<<rate2<<" bps "<<" RTT1 "<<rtt1<<" ms "<<" RTT2 "<<rtt2<<" ms ";
   mpcollector_->MpSetRatio(mpratio);
@@ -886,85 +880,27 @@ void RtpTransportControllerSend::PostUpdates(NetworkControlUpdate update,Network
       UpdateControlState();
       pp_target_rate=update.target_rate;
     }
-  }
-  //else 
-  // if(( mpcollector_->MpGetScheduler().find("window")!=std::string::npos)){//sandy: You have to check if redundant is in place
-
-  //   if (update.congestion_window) {
-  //     pp_congestion_window=update.congestion_window;
-  //     pacer()->SetCongestionWindow(*update.congestion_window+*update.congestion_window);
-  //     // pacer()->SetCongestionWindow(*update.congestion_window+*update.congestion_window);
-  //   }
-  //   if (update.pacer_config) {
-  //     pp_pacer_config=update.pacer_config;
-  //     pacer()->SetPacingRates((update.pacer_config->data_rate()+update.pacer_config->data_rate()),
-  //                             (update.pacer_config->pad_rate()+update.pacer_config->pad_rate()));
-  //     // pacer()->SetPacingRates((update.pacer_config->data_rate()),
-  //     //                         (update.pacer_config->pad_rate()));
-  //     if(mpcollector_->MpGetPrimaryWindow()<=0)
-  //       mpcollector_->MpSetPrimaryWindow(pp_pacer_config->data_window.bytes()/2.5);
-  //     if(mpcollector_->MpGetSecondaryWindow()<=0)
-  //       mpcollector_->MpSetSecondaryWindow(pp_pacer_config->data_window.bytes()/2.5);
-  //   }
-  //   for (const auto& probe : update.probe_cluster_configs) {
-  //     pacer()->CreateProbeCluster(probe.target_data_rate, probe.id);
-  //   }
-  //   if (update.target_rate) {
-  //     update.target_rate->target_rate+=update.target_rate->target_rate;
-  //     update.target_rate->stable_target_rate+=update.target_rate->stable_target_rate;
-  //     update.target_rate->cwnd_reduce_ratio+=update.target_rate->cwnd_reduce_ratio;
-  //     update.target_rate->network_estimate.bandwidth+=update.target_rate->network_estimate.bandwidth;
-  //     update.target_rate->network_estimate.loss_rate_ratio+=update.target_rate->network_estimate.loss_rate_ratio;
-  //     //For RTT and BEW just keep the maxium of two
-  //     // update.target_rate->network_estimate.round_trip_time=std::max(update.target_rate->network_estimate.round_trip_time, 
-  //     //   update.target_rate->network_estimate.round_trip_time);
-  //     // update.target_rate->network_estimate.bwe_period=std::max(update.target_rate->network_estimate.bwe_period, 
-  //     //   update.target_rate->network_estimate.bwe_period);
-  //     control_handler_->SetTargetRate(*update.target_rate);
-  //     UpdateControlState();
-  //     pp_target_rate=update.target_rate;
-  //   }
-  // }
-  else{
-    // RTC_LOG(INFO)<<"sandyred non redundant scheuler";
-    //sandy: Secondary path open and consider both of them
-    //Congestion window
-    //First change the pacer queue time
-    // TimeDelta expected_queue_time = pacer()->ExpectedQueueTime();
-    // control_handler_->SetPacerQueue(expected_queue_time*2);//Mp path enabled and pacer queue needs to be increased
+  }else{
     if(update.congestion_window && update2.congestion_window){
       // RTC_LOG(INFO)<<"sandysched pacer congestion window: P1 and P2";
       sp_congestion_window=update2.congestion_window;
       pp_congestion_window=update.congestion_window;
-      if(window_scheduler)
-        pacer()->SetCongestionWindow((*update.congestion_window*1.5)+*update2.congestion_window);  
-      else
-        pacer()->SetCongestionWindow(*update.congestion_window+*update2.congestion_window);
+      pacer()->SetCongestionWindow(*update.congestion_window+*update2.congestion_window);
     }else if(!update.congestion_window && update2.congestion_window){
       // RTC_LOG(INFO)<<"sandysched pacer congestion window: P2 only";
       sp_congestion_window=update2.congestion_window;
-      if(window_scheduler)
-        pacer()->SetCongestionWindow((*pp_congestion_window*1.5)+*update2.congestion_window);
-      else
-        pacer()->SetCongestionWindow(*pp_congestion_window+*update2.congestion_window);
+      pacer()->SetCongestionWindow(*pp_congestion_window+*update2.congestion_window);
     }else if(update.congestion_window && !update2.congestion_window){
       // RTC_LOG(INFO)<<"sandysched pacer congestion window: P1 only";
       pp_congestion_window=update.congestion_window;
-      if(window_scheduler)
-        pacer()->SetCongestionWindow((*update.congestion_window*1.5)+*sp_congestion_window);
-      else
-        pacer()->SetCongestionWindow(*update.congestion_window+*sp_congestion_window);
+      pacer()->SetCongestionWindow(*update.congestion_window+*sp_congestion_window);
     }
     //Pacing rates
     if (update.pacer_config && update2.pacer_config) {
       RTC_LOG(INFO)<<"sandysched pacer rate: P1 and P2";
       pp_pacer_config=update.pacer_config;
       sp_pacer_config=update2.pacer_config;
-      if(window_scheduler)
-        pacer()->SetPacingRates((update.pacer_config->data_rate()*1.5)+update2.pacer_config->data_rate(),
-                              update.pacer_config->pad_rate()+update2.pacer_config->pad_rate());  
-      else
-        pacer()->SetPacingRates(update.pacer_config->data_rate()+update2.pacer_config->data_rate(),
+      pacer()->SetPacingRates(update.pacer_config->data_rate()+update2.pacer_config->data_rate(),
                               update.pacer_config->pad_rate()+update2.pacer_config->pad_rate());
       if(mpcollector_->MpGetPrimaryWindow()<=0)
         mpcollector_->MpSetPrimaryWindow(pp_pacer_config->data_window.bytes()/2.5);
@@ -977,21 +913,14 @@ void RtpTransportControllerSend::PostUpdates(NetworkControlUpdate update,Network
       sp_pacer_config=update2.pacer_config;
       if(mpcollector_->MpGetSecondaryWindow()<=0)
         mpcollector_->MpSetSecondaryWindow(sp_pacer_config->data_window.bytes()/2.5);
-      if(pp_pacer_config){
-        if(window_scheduler)
-          pacer()->SetPacingRates((pp_pacer_config->data_rate()*1.5)+update2.pacer_config->data_rate(),
-                                pp_pacer_config->pad_rate()+update2.pacer_config->pad_rate());
-        else
-          pacer()->SetPacingRates(pp_pacer_config->data_rate()+update2.pacer_config->data_rate(),
+      pacer()->SetPacingRates(pp_pacer_config->data_rate()+update2.pacer_config->data_rate(),
                                 pp_pacer_config->pad_rate()+update2.pacer_config->pad_rate());
         if(mpcollector_->MpGetPrimaryWindow()<=0)
           mpcollector_->MpSetPrimaryWindow(pp_pacer_config->data_window.bytes()/2.5);
         RTC_LOG(INFO)<<"sandysched the P1 window: "<<pp_pacer_config->data_window.bytes()/2.5<<" : "<<pp_pacer_config->pad_window.bytes() 
       <<"P2 window: "<<sp_pacer_config->data_window.bytes()/2.5<<" : "<<sp_pacer_config->pad_window.bytes(); 
-      }else{
-        pacer()->SetPacingRates(update2.pacer_config->data_rate()+update2.pacer_config->data_rate(),
+      pacer()->SetPacingRates(update2.pacer_config->data_rate()+update2.pacer_config->data_rate(),
                                 update2.pacer_config->pad_rate()+update2.pacer_config->pad_rate());
-      }
     }else if (update.pacer_config && !update2.pacer_config){
       RTC_LOG(INFO)<<"sandysched pacer rate: P1 only";
       pp_pacer_config=update.pacer_config;
@@ -999,25 +928,18 @@ void RtpTransportControllerSend::PostUpdates(NetworkControlUpdate update,Network
         mpcollector_->MpSetPrimaryWindow(pp_pacer_config->data_window.bytes()/2.5);
       
       if(sp_pacer_config){
-        if(window_scheduler)
-          pacer()->SetPacingRates((update.pacer_config->data_rate()*1.5)+sp_pacer_config->data_rate(),
-                                update.pacer_config->pad_rate()+sp_pacer_config->pad_rate());
-        else
-          pacer()->SetPacingRates(update.pacer_config->data_rate()+sp_pacer_config->data_rate(),
+        pacer()->SetPacingRates(update.pacer_config->data_rate()+sp_pacer_config->data_rate(),
                                 update.pacer_config->pad_rate()+sp_pacer_config->pad_rate());
         if(mpcollector_->MpGetSecondaryWindow()<=0)
           mpcollector_->MpSetSecondaryWindow(sp_pacer_config->data_window.bytes()/2.5);
         RTC_LOG(INFO)<<"sandysched the P1 window: "<<pp_pacer_config->data_window.bytes()/2.5<<" : "<<pp_pacer_config->pad_window.bytes() 
       <<"P2 window: "<<sp_pacer_config->data_window.bytes()/2.5<<" : "<<sp_pacer_config->pad_window.bytes(); 
-      }else{
-        pacer()->SetPacingRates(update.pacer_config->data_rate()+update.pacer_config->data_rate(),
+      pacer()->SetPacingRates(update.pacer_config->data_rate()+update.pacer_config->data_rate(),
                                 update.pacer_config->pad_rate()+update.pacer_config->pad_rate());
       }
     }
     //probing 
     for (const auto& probe : update.probe_cluster_configs) {
-      // if(window_scheduler)
-      //   pacer()->CreateProbeCluster(probe.target_data_rate*3.5, probe.id);//sandy: For probing I will consider sum
       pacer()->CreateProbeCluster(probe.target_data_rate*2, probe.id);//sandy: For probing I will consider sum
     }
     //Target rate
@@ -1039,22 +961,16 @@ void RtpTransportControllerSend::PostUpdates(NetworkControlUpdate update,Network
       MpFindRatio(update.target_rate->network_estimate.round_trip_time.ms(),update2.target_rate->network_estimate.round_trip_time.ms(), 
           update.target_rate->target_rate.bps(),update2.target_rate->target_rate.bps(),mpcollector_->MpGetBestPathId());
 
-      if(window_scheduler){
-        update.target_rate->target_rate=(update.target_rate->target_rate+update2.target_rate->target_rate);//+update2.target_rate->target_rate;
-        update.target_rate->stable_target_rate=(update.target_rate->stable_target_rate+update2.target_rate->stable_target_rate);//+update2.target_rate->stable_target_rate;
-        update.target_rate->network_estimate.bandwidth=(update.target_rate->network_estimate.bandwidth+update2.target_rate->network_estimate.bandwidth);//+update2.target_rate->network_estimate.bandwidth;        
-      }else{
-        update.target_rate->target_rate+=update2.target_rate->target_rate;
-        update.target_rate->stable_target_rate+=update2.target_rate->stable_target_rate;
-        update.target_rate->network_estimate.bandwidth+=update2.target_rate->network_estimate.bandwidth;
-      }
-      update.target_rate->network_estimate.loss_rate_ratio+=update2.target_rate->network_estimate.loss_rate_ratio;
+      update.target_rate->target_rate+=update2.target_rate->target_rate;
+      update.target_rate->stable_target_rate+=update2.target_rate->stable_target_rate;
+      update.target_rate->network_estimate.bandwidth+=update2.target_rate->network_estimate.bandwidth;
       update.target_rate->cwnd_reduce_ratio+=update2.target_rate->cwnd_reduce_ratio;
-      update.target_rate->network_estimate.loss_rate_ratio+=update2.target_rate->network_estimate.loss_rate_ratio;
+      update.target_rate->network_estimate.loss_rate_ratio=std::min(update.target_rate->network_estimate.loss_rate_ratio, 
+        update2.target_rate->network_estimate.loss_rate_ratio);
       //For RTT and BEW just keep the maxium of two
-      update.target_rate->network_estimate.round_trip_time=std::max(update.target_rate->network_estimate.round_trip_time, 
+      update.target_rate->network_estimate.round_trip_time=std::min(update.target_rate->network_estimate.round_trip_time, 
         update2.target_rate->network_estimate.round_trip_time);
-      update.target_rate->network_estimate.bwe_period=std::max(update.target_rate->network_estimate.bwe_period, 
+      update.target_rate->network_estimate.bwe_period=std::min(update.target_rate->network_estimate.bwe_period, 
         update2.target_rate->network_estimate.bwe_period);
       control_handler_->SetTargetRate(*update.target_rate);
       UpdateControlState();
@@ -1078,29 +994,22 @@ void RtpTransportControllerSend::PostUpdates(NetworkControlUpdate update,Network
                   pp_target_rate->target_rate.bps(),  //Rate 1
                   update2.target_rate->target_rate.bps(),mpcollector_->MpGetBestPathId());
 
-        if(window_scheduler){
-          update2.target_rate->target_rate=(update2.target_rate->target_rate+pp_target_rate->target_rate);//+pp_target_rate->target_rate;
-          update2.target_rate->stable_target_rate=(update2.target_rate->stable_target_rate+pp_target_rate->stable_target_rate);//+pp_target_rate->stable_target_rate;
-          update2.target_rate->network_estimate.bandwidth=(update2.target_rate->network_estimate.bandwidth+pp_target_rate->network_estimate.bandwidth);//+pp_target_rate->network_estimate.bandwidth;
-        }else{
-          update2.target_rate->target_rate+=pp_target_rate->target_rate;
-          update2.target_rate->stable_target_rate+=pp_target_rate->stable_target_rate;
-          update2.target_rate->network_estimate.bandwidth+=pp_target_rate->network_estimate.bandwidth;
-        }    
+        update2.target_rate->target_rate+=pp_target_rate->target_rate;
+        update2.target_rate->stable_target_rate+=pp_target_rate->stable_target_rate;
+        update2.target_rate->network_estimate.bandwidth+=pp_target_rate->network_estimate.bandwidth;    
         update2.target_rate->cwnd_reduce_ratio+=pp_target_rate->cwnd_reduce_ratio;
-        update2.target_rate->network_estimate.loss_rate_ratio+=pp_target_rate->network_estimate.loss_rate_ratio;
+        update2.target_rate->network_estimate.loss_rate_ratio=std::min(update2.target_rate->network_estimate.loss_rate_ratio,
+          pp_target_rate->network_estimate.loss_rate_ratio);
         //RTT and BEW time sould be of primary paths
-        update2.target_rate->network_estimate.round_trip_time=std::max(update2.target_rate->network_estimate.round_trip_time, 
+        update2.target_rate->network_estimate.round_trip_time=std::min(update2.target_rate->network_estimate.round_trip_time, 
           pp_target_rate->network_estimate.round_trip_time);
-        update2.target_rate->network_estimate.bwe_period=std::max(update2.target_rate->network_estimate.bwe_period, 
+        update2.target_rate->network_estimate.bwe_period=std::min(update2.target_rate->network_estimate.bwe_period, 
           pp_target_rate->network_estimate.bwe_period);        
       }else{
         update2.target_rate->target_rate+=update2.target_rate->target_rate;
         update2.target_rate->stable_target_rate+=update2.target_rate->stable_target_rate;
         update2.target_rate->network_estimate.bandwidth+=update2.target_rate->network_estimate.bandwidth;
         update2.target_rate->cwnd_reduce_ratio+=update2.target_rate->cwnd_reduce_ratio;
-        update2.target_rate->network_estimate.loss_rate_ratio+=update2.target_rate->network_estimate.loss_rate_ratio;
-        update2.target_rate->network_estimate.round_trip_time=pp_target_rate->network_estimate.round_trip_time;
       }
       control_handler_->SetTargetRate(*update2.target_rate);
       UpdateControlState();
@@ -1108,7 +1017,7 @@ void RtpTransportControllerSend::PostUpdates(NetworkControlUpdate update,Network
       // RTC_LOG(INFO)<<"sandysched  received P1 updates only";
       pp_target_rate=update.target_rate;
       if(sp_target_rate){
-        RTC_LOG(INFO)<<"sandyratio the P1 only rate update: "<<pp_target_rate->target_rate.bps()  
+        RTC_LOG(INFO)<<"sandyratio the P1 only rate update: "<<update.target_rate->target_rate.bps()  
         <<"P2 rate: "<<sp_target_rate->target_rate.bps()<<"P1 : P2 RTT"<<update.target_rate->network_estimate.round_trip_time.ms()<<":"<<  
         sp_target_rate->network_estimate.round_trip_time.ms()<<"Loss report= "<<update.target_rate->network_estimate.loss_rate_ratio<<":"<< 
         sp_target_rate->network_estimate.loss_rate_ratio; 
@@ -1125,21 +1034,16 @@ void RtpTransportControllerSend::PostUpdates(NetworkControlUpdate update,Network
                   update.target_rate->target_rate.bps(),  //Rate 1
                   sp_target_rate->target_rate.bps(),mpcollector_->MpGetBestPathId());
 
-        if(window_scheduler){
-          update.target_rate->target_rate=(update.target_rate->target_rate+sp_target_rate->target_rate);//+sp_target_rate->target_rate;
-          update.target_rate->stable_target_rate=(update.target_rate->stable_target_rate+sp_target_rate->stable_target_rate);//+sp_target_rate->stable_target_rate;
-          update.target_rate->network_estimate.bandwidth=(update.target_rate->network_estimate.bandwidth+sp_target_rate->network_estimate.bandwidth);//+sp_target_rate->network_estimate.bandwidth;
-        }else{
-          update.target_rate->target_rate+=sp_target_rate->target_rate;
-          update.target_rate->stable_target_rate+=sp_target_rate->stable_target_rate;
-          update.target_rate->network_estimate.bandwidth+=sp_target_rate->network_estimate.bandwidth;
-        }
+        update.target_rate->target_rate+=sp_target_rate->target_rate;
+        update.target_rate->stable_target_rate+=sp_target_rate->stable_target_rate;
+        update.target_rate->network_estimate.bandwidth+=sp_target_rate->network_estimate.bandwidth;
         update.target_rate->cwnd_reduce_ratio+=sp_target_rate->cwnd_reduce_ratio;
-        update.target_rate->network_estimate.loss_rate_ratio+=sp_target_rate->network_estimate.loss_rate_ratio;
+        update.target_rate->network_estimate.loss_rate_ratio=std::min(update.target_rate->network_estimate.loss_rate_ratio,
+          sp_target_rate->network_estimate.loss_rate_ratio);
         //RTT and BEW time sould be of primary paths
-        update.target_rate->network_estimate.round_trip_time=std::max(update.target_rate->network_estimate.round_trip_time, 
+        update.target_rate->network_estimate.round_trip_time=std::min(update.target_rate->network_estimate.round_trip_time, 
         sp_target_rate->network_estimate.round_trip_time);
-        update.target_rate->network_estimate.bwe_period=std::max(update.target_rate->network_estimate.bwe_period, 
+        update.target_rate->network_estimate.bwe_period=std::min(update.target_rate->network_estimate.bwe_period, 
         sp_target_rate->network_estimate.bwe_period);
         
       }else{
@@ -1147,8 +1051,7 @@ void RtpTransportControllerSend::PostUpdates(NetworkControlUpdate update,Network
         update.target_rate->stable_target_rate+=update.target_rate->stable_target_rate;
         update.target_rate->network_estimate.bandwidth+=update.target_rate->network_estimate.bandwidth;
         update.target_rate->cwnd_reduce_ratio+=update.target_rate->cwnd_reduce_ratio;
-        update.target_rate->network_estimate.loss_rate_ratio+=update.target_rate->network_estimate.loss_rate_ratio;
-        //RTT and BEW time sould be of primary paths
+        //Loss,RTT and BEW time sould be of primary paths
       }
       control_handler_->SetTargetRate(*update.target_rate);
       UpdateControlState();
