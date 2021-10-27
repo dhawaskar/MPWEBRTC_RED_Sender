@@ -26,7 +26,7 @@ ABSL_FLAG(bool,
           false,
           "Connect to the server without user "
           "intervention.");
-ABSL_FLAG(std::string, server, "128.138.224.183", "The server to connect to.");
+ABSL_FLAG(std::string, server, "128.138.224.220", "The server to connect to.");
 ABSL_FLAG(int,
           port,
           kDefaultServerPort,

@@ -77,7 +77,7 @@ class CapturerTrackSource : public webrtc::VideoTrackSource {
     const size_t kHeight = 1080;//1080
     // const size_t kWidth = 640;//2048;//1920
     // const size_t kHeight = 480;//;//1080
-    const size_t kFps = 60;
+    const size_t kFps = 30;
     std::unique_ptr<webrtc::test::VcmCapturer> capturer;
     std::unique_ptr<webrtc::VideoCaptureModule::DeviceInfo> info(
         webrtc::VideoCaptureFactory::CreateDeviceInfo());
@@ -182,9 +182,21 @@ bool Conductor::CreatePeerConnection(bool dtls) {
   webrtc::PeerConnectionInterface::RTCConfiguration config;
   config.sdp_semantics = webrtc::SdpSemantics::kUnifiedPlan;
   config.enable_dtls_srtp = dtls;
-  webrtc::PeerConnectionInterface::IceServer server;
+  webrtc::PeerConnectionInterface::IceServer server,server1;
+  //sandy: Set your relay or turn server here please
   server.uri = GetPeerConnectionString();
+  // std::vector<std::string> url_string,url_string1;
+  // url_string.push_back("turn:128.110.218.254:3478?transport=udp");
+  // server.urls=url_string;
+  // server.username="sandy";
+  // server.password="sandy123";
   config.servers.push_back(server);
+  //sandy: Relay 2
+  // url_string1.push_back("turn:128.105.144.233:3478?transport=udp");
+  // server1.urls=url_string1;
+  // server1.username="sandy";
+  // server1.password="sandy123";
+  // config.servers.push_back(server1);
 
   peer_connection_ = peer_connection_factory_->CreatePeerConnection(
       config, nullptr, nullptr, this);
@@ -236,7 +248,17 @@ void Conductor::OnIceCandidate(const webrtc::IceCandidateInterface* candidate) {
     }
     return;
   }
-
+  std::string sandy_candidate;
+  candidate->ToString(&sandy_candidate);
+  RTC_LOG(INFO)<<"sandycandidate: "<< sandy_candidate;
+  // if(sandy_candidate.find("relay",0,5)==std::string::npos){
+  //   RTC_LOG(INFO)<<"sandycandidate: this is not relay";
+  //   return;
+  // }
+  // if(sandy_candidate.find("192.168.241.187",0,std::strlen("192.168.241.187"))!=std::string::npos){
+  //   RTC_LOG(INFO)<<"sandycandidate: this is not a good ip";
+  //   return;
+  // }
   Json::StyledWriter writer;
   Json::Value jmessage;
 

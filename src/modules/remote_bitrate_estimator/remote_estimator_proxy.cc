@@ -78,7 +78,12 @@ void RemoteEstimatorProxy::IncomingPacket(int64_t arrival_time_ms,
   int64_t seq_p = 0,seq_s=0;
 
   if(header.extension.hassandy && header.extension.hasMpTransportSequenceNumber){
-    pathid=header.extension.sandy;
+    //sandy: Retranmission packets should be counted too
+    if(header.extension.sandy<=0||header.extension.sandy==4||header.extension.sandy==1){
+      pathid=1;
+    }else{
+      pathid=2;
+    }
     subflow_seq=unwrapper_.Unwrap(header.extension.mptransportSequenceNumber);
     // RTC_DLOG(LS_ERROR)<<"sandystats received RTP packet path id="<<pathid<<" mp Transport seq= "<<subflow_seq<<":"<< 
     // " Transport seq= "<<unwrapper_.Unwrap(header.extension.transportSequenceNumber)<<" mp subflow "<< 

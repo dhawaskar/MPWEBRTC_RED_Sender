@@ -1292,7 +1292,7 @@ PacketReceiver::DeliveryStatus Call::DeliverRtp(MediaType media_type,
                                                 rtc::CopyOnWriteBuffer packet,
                                                 int64_t packet_time_us,int pathid) {
   RTC_DCHECK(packet.GetPathid()>0);
-  RTC_LOG(INFO)<<"sandystats received packet on "<<packet.GetPathid()<<":"<<pathid;
+  // RTC_LOG(INFO)<<"sandystats received packet on "<<packet.GetPathid()<<":"<<pathid;
 
   TRACE_EVENT0("webrtc", "Call::DeliverRtp");
   
@@ -1337,24 +1337,8 @@ PacketReceiver::DeliveryStatus Call::DeliverRtp(MediaType media_type,
   }
 
   parsed_packet.IdentifyExtensions(it->second.extensions);
-
-
-  /*sandy:check connection level pathid and RTP level pathid. In Redundant scheduler it will be different and hence
-  it needs to be reset
-  */
-
-  RTPHeader header;
-  parsed_packet.GetHeader(&header);
-  if(header.extension.sandy!=parsed_packet.pathid){
-    RTC_LOG(INFO)<<"sandy: This must Redundant scheduler RTP path= "<<header.extension.sandy<< 
-    ":"<<parsed_packet.subflow_id<<"connection path= "<<parsed_packet.pathid;
-    header.extension.sandy=parsed_packet.pathid;
-   // parsed_packet.SetExtension<sandy>(1);//Only one path from here
-    parsed_packet.subflow_id=1;//only one path from here
-    RTC_LOG(INFO)<<"sandy: This must Redundant scheduler RTP path= "<<header.extension.sandy<< 
-    ":"<<parsed_packet.subflow_id<<"connection path= "<<parsed_packet.pathid;
-  }
-
+  
+  //sandy: This one is TFB controller.
   NotifyBweOfReceivedPacket(parsed_packet, media_type);
 
   // RateCounters expect input parameter as int, save it as int,
@@ -1374,120 +1358,33 @@ PacketReceiver::DeliveryStatus Call::DeliverRtp(MediaType media_type,
       return DELIVERY_OK;
     }
   } else if (media_type == MediaType::VIDEO) {
-
-
-    // //sandy: Adding the media OFO
-    // if(mpcollector_ && mpcollector_->MpISsecondPathOpen()){
-    //   RTPHeader header;
-    //   parsed_packet.GetHeader(&header);
-    //   // RTC_LOG(INFO)<<"sandymediaofo the multipath WebRTC has been enabled seq="<<header.sequenceNumber<<" path= "<< 
-    //   // header.extension.sandy<<" subflow seq "<<header.extension.mpflowseqnum;
-      
-    //   if(!MpMediaseq_){
-    //     MpMediaseq_=header.sequenceNumber;
-    //   }
-    //   /*
-    //   sandy: How to differentiate retransmitted and out of order pacekt? Use transportsequence number. 
-    //   For retransmitted packet the transport sequence number is always higher and for out of order the transport sequence 
-    //   number is always smaller. Ex: Packets arrived in order 32,34,31,33. In this case starting sequence should be 31 not 
-    //   32. Since 31 is out of order packet,its transport sequence is smaller than the 32 and hence we can start at 31. If 
-    //   31 is retransmitted sequence number we should simply send it to upper layer directly.
-    //   */
-    //   if(header.sequenceNumber<MpMediaseq_){
-    //     auto it=MpMediahistory_.find(MpMediaseq_);
-    //     if(it!=MpMediahistory_.end()){
-    //       RTPHeader Mpheader;
-    //       it->second.GetHeader(&Mpheader); 
-    //       if(header.extension.transportSequenceNumber < Mpheader.extension.transportSequenceNumber){
-    //         MpMediaseq_=header.sequenceNumber;
-    //       }
-    //       else{
-    //         //sandy:send it to video receive controller as it is lost packet.
-    //         // RTC_LOG(INFO)<<"sandymediaofo the retransmitted packet must be sent directly";
-    //         parsed_packet.set_payload_type_frequency(kVideoPayloadTypeFrequency);
-    //         if(video_receiver_controller_.OnRtpPacket(parsed_packet)){
-    //           received_bytes_per_second_counter_.Add(length);
-    //           received_video_bytes_per_second_counter_.Add(length);
-    //           event_log_->Log(
-    //               std::make_unique<RtcEventRtpPacketIncoming>(parsed_packet));
-    //           const int64_t arrival_time_ms = parsed_packet.arrival_time_ms();
-    //           if (!first_received_rtp_video_ms_) {
-    //             first_received_rtp_video_ms_.emplace(arrival_time_ms);
-    //           }
-    //           last_received_rtp_video_ms_.emplace(arrival_time_ms);
-    //           return DELIVERY_OK;      
-    //         }
-    //         //sandy: This packet is lost even after waiting for such long time so just drop it 
-    //         //return DELIVERY_OK;
-    //       }
-    //     }
-    //   }
-    //   MpMediahistory_.insert(std::make_pair(header.sequenceNumber,parsed_packet));
-    //   MpMediacount_++;
-    //   // RTC_LOG(INFO)<<"sandymediaofo let us insert the media RTP "<<header.sequenceNumber<<" count "<<MpMediacount_<< 
-    //   // " limit "<<MpMediaReorderingCount_;
-    //   if(MpMediacount_>MpMediaReorderingCount_){
-    //     MpMediaseqnext=MpMediaseq_;
-    //     // RTC_LOG(INFO)<<"sandymediaofo let us send the media RTP to video controller "<<MpMediaseqnext;
-    //     int i;
-    //     for(i=0;i<=MpMediaReorderingCount_;i++){
-    //       auto it=MpMediahistory_.find(MpMediaseqnext);
-    //       if(it!=MpMediahistory_.end()){
-    //         if(MpMediaseqlastlost==MpMediaseqnext && MpMediaseqlastlost){
-    //           MpMediaseqnotfoundcount=0;
-    //         }
-    //         // RTC_LOG(INFO)<<"sandymediaofo sending Media "<<MpMediaseqnext;
-    //         int Mplength = static_cast<int>(it->second.size());
-    //         //send the packet to video streaming controller
-    //         it->second.set_payload_type_frequency(kVideoPayloadTypeFrequency);
-    //         if(video_receiver_controller_.OnRtpPacket(it->second)){
-    //           received_bytes_per_second_counter_.Add(Mplength);
-    //           received_video_bytes_per_second_counter_.Add(Mplength);
-    //           event_log_->Log(
-    //               std::make_unique<RtcEventRtpPacketIncoming>(it->second));
-    //           const int64_t arrival_time_ms = it->second.arrival_time_ms();
-    //           if (!first_received_rtp_video_ms_) {
-    //             first_received_rtp_video_ms_.emplace(arrival_time_ms);
-    //           }
-    //           last_received_rtp_video_ms_.emplace(arrival_time_ms);
-    //         }
-    //         //Sent the packet to video streaming controller
-    //         MpMediahistory_.erase(it->first);
-    //         MpMediacount_-=1;
-    //       }else{
-    //         // RTC_LOG(INFO)<<"sandymediaofo sending Media cannot be found "<<MpMediaseqnext;
-    //         MpMediaseqnotfoundcount++;
-    //         MpMediaseq_=MpMediaseqnext;
-    //         MpMediaseqlastlost=MpMediaseqnext;//store the lost sequence number
-    //         if(MpMediacount_>MpMediaReorderingCount_){
-    //           MpMediacount_/=2;
-    //         }
-    //         if(MpMediaseqnotfoundcount>=MpMediaReorderingwaitCount){//Packet could be lost as we waited for 10 packets
-    //           // RTC_LOG(INFO)<<"sandymediaofo sorry could not find this packet and we assume it to be lossed "<< MpMediaseqnext<< 
-    //           // " count= "<<MpMediaseqnotfoundcount<<" limit "<<MpMediaReorderingwaitCount;
-    //           MpMediaseqnotfoundcount=0;
-    //           MpMediaseqnext++;
-    //           MpMediacount_=0;
-    //           break;
-    //         }
-    //         break;
-    //       }
-    //       MpMediaseqnext++;
-    //     }
-    //     if(i==MpMediaReorderingCount_)
-    //       MpMediacount_=0;
-    //     MpMediaseq_=MpMediaseqnext;
-    //   }
-    //   return DELIVERY_OK;      
-    // }
-
-
-
-
-
-
-
     parsed_packet.set_payload_type_frequency(kVideoPayloadTypeFrequency);
+
+    /*Sandy: Since we already took care of retranmission of packets for TFB in above notifyBEWfunction
+    you can modify packets header path id now
+    */
+    /*sandy:check connection level pathid and RTP header level pathid.
+    They mean different for retransmitted packets.
+    */
+    RTPHeader header;
+    parsed_packet.GetHeader(&header);
+    if(header.extension.sandy!=parsed_packet.pathid){
+      RTC_LOG(INFO)<<"sandyrtx: This must retranmission of RTP path= "<<header.extension.sandy<< 
+      ":"<<parsed_packet.subflow_id<<"connection path= "<<parsed_packet.pathid;
+      if((header.extension.sandy==3)||header.extension.sandy==0 || header.extension.sandy==1){
+        RTC_LOG(INFO)<<"sandyrtx received retranmission packet of path 1 header pathid="<< 
+        header.extension.sandy<<" connection pathid "<<parsed_packet.pathid;
+        parsed_packet.pathid=1;
+        parsed_packet.SetExtension<sandy>(1);//Only one path from here
+        parsed_packet.subflow_id=1;//only one path from here
+      }else{
+        RTC_LOG(INFO)<<"sandyrtx received retranmission packet of path 2";
+        parsed_packet.pathid=2;
+        parsed_packet.SetExtension<sandy>(2);//Only one path from here
+        parsed_packet.subflow_id=2;//only one path from here
+      } 
+    }
+
     if (video_receiver_controller_.OnRtpPacket(parsed_packet)) {
       received_bytes_per_second_counter_.Add(length);
       received_video_bytes_per_second_counter_.Add(length);

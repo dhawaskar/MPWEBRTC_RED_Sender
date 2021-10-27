@@ -682,8 +682,9 @@ void RtpVideoStreamReceiver2::OnRtpPacket(const RtpPacketReceived& packet) {
   
   RTPHeader header;
   packet.GetHeader(&header);
-  RTC_LOG(INFO)<<"sandy the path id :"<<packet.pathid<<" in header: "<<header.extension.sandy;
-  RTC_DCHECK(packet.pathid>0);
+  // RTC_LOG(INFO)<<"sandyrtx the path id :"<<packet.pathid<<" in header: "<<header.extension.sandy;
+  //sandy: Retransmitted packets will have different path id
+  RTC_DCHECK(packet.pathid>0 && packet.pathid==header.extension.sandy);
   RTC_DCHECK_RUN_ON(&worker_task_checker_);
 
   if (!receiving_) {

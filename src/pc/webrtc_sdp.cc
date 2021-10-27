@@ -210,7 +210,7 @@ static const char kSessionOriginNettype[] = "IN";
 static const char kSessionOriginAddrtype[] = "IP4";
 static const char kSessionOriginAddress[] = "127.0.0.1";
 static const char kSessionName[] = "s=-";
-static const char kTimeDescription[] = "t=0 0";
+static const char kTimeDescription[] = "t=50 50";
 static const char kAttrGroup[] = "a=group:BUNDLE";
 static const char kConnectionNettype[] = "IN";
 static const char kConnectionIpv4Addrtype[] = "IP4";
@@ -1562,7 +1562,7 @@ void BuildMediaDescription(const ContentInfo* content_info,
   }
   //sandy: add the scheduler
   InitAttrLine(kMpScheduler, &os);
-  os << kSdpDelimiterColon << "window";
+  os << kSdpDelimiterColon << "window";//red
   AddLine(os.str(), message);  
 }
 

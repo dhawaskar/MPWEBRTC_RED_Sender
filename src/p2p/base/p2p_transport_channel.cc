@@ -38,6 +38,7 @@
 #include "api/mp_global.h"
 
 int sandy_connection_wait=50; 
+std::vector<cricket::Connection *> sandy_writable_nonsendable;//connection that cannot talk to each other
 
 namespace {
 
@@ -1541,10 +1542,17 @@ int P2PTransportChannel::SendPacket(const char* data,
   if(!second_connection_ && sandy_connection_wait>0){
     for (Connection* connection : connections()) {
       ConnectionInfo stats = connection->stats();
+      
+      // if(find (sandy_writable_nonsendable.begin(), sandy_writable_nonsendable.end(), connection)!= sandy_writable_nonsendable.end()){
+      //   RTC_LOG(INFO)<<"sandyconnection This connection is writable but cannot send through it";
+      //   continue;
+      // }
+      //sandy: You should try with all the connections sandesh
       if(connections().size()>1 &&   
             (selected_connection_->stats().remote_candidate.address().port()!=stats.remote_candidate.address().port()) && 
             (selected_connection_->stats().local_candidate.address().port()!=stats.local_candidate.address().port()) &&  
-            (stats.local_candidate.type()=="local" && stats.remote_candidate.type()=="local") && 
+            ((stats.local_candidate.type()=="local" && stats.remote_candidate.type()=="local")||(stats.local_candidate.type()=="relay" &&  
+               stats.remote_candidate.type()=="relay")) && 
             (stats.local_candidate.protocol()=="udp" && stats.remote_candidate.protocol()=="udp"))
       {
             
@@ -1553,7 +1561,13 @@ int P2PTransportChannel::SendPacket(const char* data,
         connection->stats().remote_candidate.address().ToString()<<connection->stats().local_candidate.network_name()<<"\n";
       
         second_connection_= connection;
+
+        // if (!ReadyToSend(second_connection_)) {
+        //   RTC_LOG(INFO)<<"sandyconnection this connection is writable but cannot send data";
+        //   sandy_writable_nonsendable.push_back(connection);
+        // }else{
         mpcollector_->MpSetSecondPath(1);          
+        //}
       }
       else{
         RTC_LOG(LS_INFO)<<"pathsandy: ***** This connection is not writable  *****\t from:"<<  
@@ -1994,7 +2008,7 @@ void P2PTransportChannel::CheckAndPing() {
   RTC_DCHECK_RUN_ON(network_thread_);
   // Make sure the states of the connections are up-to-date (since this affects
   // which ones are pingable).
-  RTC_LOG(INFO)<<"sandyconnection : check and pinging";
+  //// RTC_LOG(INFO)<<"sandyconnection : check and pinging";
   UpdateConnectionStates();
 
   auto result = ice_controller_->SelectConnectionToPing(last_ping_sent_ms_);

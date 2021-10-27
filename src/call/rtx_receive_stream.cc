@@ -59,6 +59,7 @@ void RtxReceiveStream::OnRtpPacket(const RtpPacketReceived& rtx_packet) {
   }
   RtpPacketReceived media_packet;
   media_packet.pathid=rtx_packet.pathid;//sandy
+  // RTC_LOG(INFO)<<"sandyrtx received pathid "<<rtx_packet.pathid;
   media_packet.CopyHeaderFrom(rtx_packet);
 
   media_packet.SetSsrc(media_ssrc_);
