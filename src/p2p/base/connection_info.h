@@ -69,6 +69,8 @@ struct ConnectionInfo {
   uint64_t total_round_trip_time_ms;
   // https://w3c.github.io/webrtc-stats/#dom-rtcicecandidatepairstats-currentroundtriptime
   absl::optional<uint32_t> current_round_trip_time_ms;
+  int mp_lost_connection;//Mp-WebRTC has this connection used before?
+  int64_t mp_second_connection_time;//Mp-WebRTC has this connection used before?
 };
 
 // Information about all the candidate pairs of a channel.

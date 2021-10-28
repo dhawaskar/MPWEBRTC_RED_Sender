@@ -112,6 +112,18 @@ class Connection : public CandidatePairInterface,
   WriteState write_state() const { return write_state_; }
   bool writable() const { return write_state_ == STATE_WRITABLE; }
   bool receiving() const { return receiving_; }
+  int mp_lost_connection(){
+    return mp_lost_connection_;
+  }
+  void mp_lost_connection_set(int val){
+    mp_lost_connection_=val; 
+  }
+  int mp_second_connection_time(){
+    return mp_second_connection_time_;
+  }
+  void mp_second_connection_time_set(int64_t val){
+    mp_second_connection_time_=val; 
+  }
 
   // Determines whether the connection has finished connecting.  This can only
   // be false for TCP connections.
@@ -394,6 +406,8 @@ class Connection : public CandidatePairInterface,
   bool ShouldSendGoogPing(const StunMessage* message);
 
   WriteState write_state_;
+  int mp_lost_connection_;
+  int64_t mp_second_connection_time_;
   bool receiving_;
   bool connected_;
   bool pruned_;

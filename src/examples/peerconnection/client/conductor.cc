@@ -180,6 +180,8 @@ bool Conductor::CreatePeerConnection(bool dtls) {
   RTC_DCHECK(!peer_connection_);
 
   webrtc::PeerConnectionInterface::RTCConfiguration config;
+  //sandy: Please set the gathering state to continuous
+  config.continual_gathering_policy=webrtc::PeerConnectionInterface::GATHER_CONTINUALLY;
   config.sdp_semantics = webrtc::SdpSemantics::kUnifiedPlan;
   config.enable_dtls_srtp = dtls;
   webrtc::PeerConnectionInterface::IceServer server,server1;

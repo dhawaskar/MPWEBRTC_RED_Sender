@@ -834,7 +834,7 @@ void Connection::UpdateState(int64_t now) {
   // Update the receiving state.
   UpdateReceiving(now);
   if (dead(now)) {
-    RTC_LOG(INFO)<<"sandyconnection: Connection has been dead for long time:";
+    // RTC_LOG(INFO)<<"sandyconnection: Connection has been dead for long time:";
     Destroy();
   }
 }
@@ -1013,7 +1013,7 @@ std::string Connection::ToString() const {
      << "->" << remote.id() << ":" << remote.component() << ":"
      << remote.priority() << ":" << remote.type() << ":" << remote.protocol()
      << ":" << remote.address().ToSensitiveString() << "|"
-     << CONNECT_STATE_ABBREV[connected()] << RECEIVE_STATE_ABBREV[receiving()]
+     << CONNECT_STATE_ABBREV[connected()] << "sandyreceive?= "<<RECEIVE_STATE_ABBREV[receiving()]
      << WRITE_STATE_ABBREV[write_state()] << ICESTATE[static_cast<int>(state())]
      << "|" << SELECTED_STATE_ABBREV[selected()] << "|" << remote_nomination()
      << "|" << nomination() << "|" << priority() << "|";
@@ -1244,6 +1244,8 @@ ConnectionInfo Connection::stats() {
   stats_.current_round_trip_time_ms = current_round_trip_time_ms_;
   stats_.local_candidate = local_candidate();
   stats_.remote_candidate = remote_candidate();
+  stats_.mp_lost_connection=mp_lost_connection_;
+  stats_.mp_second_connection_time=mp_second_connection_time_;
   return stats_;
 }
 

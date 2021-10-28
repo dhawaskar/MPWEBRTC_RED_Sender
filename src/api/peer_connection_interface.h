@@ -469,7 +469,8 @@ class RTC_EXPORT PeerConnectionInterface : public rtc::RefCountInterface {
     // will be gathered as network interfaces change. Note that if continual
     // gathering is used, the candidate removal API should also be used, to
     // avoid an ever-growing list of candidates.
-    ContinualGatheringPolicy continual_gathering_policy = GATHER_ONCE;
+    //sandy:I want to gather the candidate continiosuly GATHER_CONTINUALLY not  GATHER_ONCE
+    ContinualGatheringPolicy continual_gathering_policy = GATHER_CONTINUALLY;
 
     // If set to true, candidate pairs will be pinged in order of most likely
     // to work (which means using a TURN server, generally), rather than in

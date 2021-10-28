@@ -34,7 +34,9 @@ ConnectionInfo::ConnectionInfo()
       state(IceCandidatePairState::WAITING),
       priority(0),
       nominated(false),
-      total_round_trip_time_ms(0) {}
+      total_round_trip_time_ms(0),
+      mp_lost_connection(0),
+      mp_second_connection_time(0) {}
 
 ConnectionInfo::ConnectionInfo(const ConnectionInfo&) = default;
 

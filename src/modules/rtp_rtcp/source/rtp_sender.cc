@@ -778,6 +778,9 @@ void RTPSender::MPTrafficSplitImplementation(
   else{
     for (auto& packet : packets) {
       if(total_packets_sent%2==0 || !mpcollector_->MpISsecondPathOpen()){//sandy: Set into primary path
+        // if(mpcollector_->MpISsecondPathOpen()==0){
+        //   RTC_LOG(INFO)<<"sandyconnection second path is closed";
+        // }
         packet->subflow_id=1;
         packet->subflow_seq=sequence_number_p_++;
         if(!mpcollector_->MpISsecondPathOpen() && packet->subflow_seq!=packet->SequenceNumber() && packet->SequenceNumber()>0 ){

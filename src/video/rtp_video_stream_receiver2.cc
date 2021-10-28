@@ -59,7 +59,7 @@ namespace {
 // TODO(philipel): Change kPacketBufferStartSize back to 32 in M63 see:
 //                 crbug.com/752886
 constexpr int kPacketBufferStartSize = 512;
-constexpr int kPacketBufferMaxSize = 1024;//2048
+constexpr int kPacketBufferMaxSize = 2048;//2048
 // int64_t sandy_key_request=0;
 int PacketBufferMaxSize() {
   // The group here must be a positive power of 2, in which case that is used as
