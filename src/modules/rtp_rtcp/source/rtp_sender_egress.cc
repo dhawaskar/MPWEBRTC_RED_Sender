@@ -197,14 +197,10 @@ void RtpSenderEgress::SendPacket(RtpPacketToSend* packet,
   // Downstream code actually uses this flag to distinguish between media and
   // everything else.
   options.is_retransmit = !is_media;
+  options.pathid=packet->subflow_id;
   if (auto packet_id = packet->GetExtension<TransportSequenceNumber>()) {
     options.packet_id = *packet_id;
     options.packet_mpid=*(packet->GetExtension<MpTransportSequenceNumber>());//sandy:Mp-WebRTC
-    if(!packet->subflow_id){
-      options.pathid=1;
-    }else{
-      options.pathid=packet->subflow_id;
-    }
     options.included_in_feedback = true;
     options.included_in_allocation = true;
     if(!mpcollector_->MpISsecondPathOpen() && packet->subflow_seq!=packet->SequenceNumber() && packet->SequenceNumber()>0 ){
@@ -249,7 +245,7 @@ void RtpSenderEgress::SendPacket(RtpPacketToSend* packet,
       // packet_history_s_->PutRtpPacket(std::make_unique<RtpPacketToSend>(*packet),
       //                             now_ms);
     }
-    else if(packet->subflow_id!=2){//sandy: Primary path add the packets
+    else if(packet->subflow_id<=1){//sandy: Primary path add the packets
       packet_history_p_->PutRtpPacket(std::make_unique<RtpPacketToSend>(*packet),
                                   now_ms);
     }else{//sandy: secondary path add the packets
@@ -572,14 +568,10 @@ void RtpSenderEgress::UpdateRtpStats(const RtpPacketToSend& packet) {
   int64_t now_ms = clock_->TimeInMilliseconds();
   // RTC_LOG(INFO)<<"sandyrtp path id of the packet being sent "<<packet.subflow_id<<"\n";
   StreamDataCounters* counters=NULL;
-  if(packet.subflow_id==1){
+  if(packet.subflow_id<=1 ||packet.subflow_id==3){
     counters = packet.Ssrc() == rtx_ssrc_ ? &rtx_rtp_stats_p_ : &rtp_stats_p_;
-
-  }else if(packet.subflow_id==2){
+  }else {
     counters = packet.Ssrc() == rtx_ssrc_ ? &rtx_rtp_stats_s_ : &rtp_stats_s_;
-  }else{
-    // RTC_LOG(INFO)<<"sandyrtcp no path id in the packet";
-    counters = packet.Ssrc() == rtx_ssrc_ ? &rtx_rtp_stats_p_ : &rtp_stats_p_;
   }
   if(!counters){
     exit(0);
@@ -601,7 +593,7 @@ void RtpSenderEgress::UpdateRtpStats(const RtpPacketToSend& packet) {
   //sandy: Maintain overall as well
   send_rates_[static_cast<size_t>(*packet.packet_type())].Update(packet.size(),
                                                                  now_ms);
-  if(packet.subflow_id!=2)
+  if(packet.subflow_id<=1 ||packet.subflow_id==3 )
     send_rates_p_[static_cast<size_t>(*packet.packet_type())].Update(packet.size(),
                                                                  now_ms);
   else

@@ -163,7 +163,7 @@ class RTPSender {
       RTC_LOCKS_EXCLUDED(send_critsect_);
 
   //sandy: Implementing the traffic split ratio for the MP-WebRTC
-  void MPTrafficSplitImplementation(std::vector<std::unique_ptr<RtpPacketToSend>> packets,int framesize,bool keyframe,bool audio)  
+  void MPTrafficSplitImplementation(std::vector<std::unique_ptr<RtpPacketToSend>> packets,int framesize,bool keyframe)  
   RTC_LOCKS_EXCLUDED(send_critsect_);
 
   // Pass a set of packets to RtpPacketSender instance, for paced or immediate

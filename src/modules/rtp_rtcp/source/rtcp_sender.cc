@@ -250,7 +250,7 @@ int32_t RTCPSender::SetSendingStatus(const FeedbackState& feedback_state,
     sending_ = sending;
   }
   if (sendRTCPBye)
-    return SendRTCP(feedback_state, kRtcpBye);
+    return SendRTCP(feedback_state, kRtcpBye,0,nullptr,1);
   return 0;
 }
 

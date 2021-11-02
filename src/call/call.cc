@@ -1340,7 +1340,50 @@ PacketReceiver::DeliveryStatus Call::DeliverRtp(MediaType media_type,
   
   //sandy: This one is TFB controller.
   NotifyBweOfReceivedPacket(parsed_packet, media_type);
-
+  /*Sandy: Since we already took care of retranmission of packets for TFB in above notifyBEWfunction
+    you can modify packets header path id now
+    */
+    /*sandy:check connection level pathid and RTP header level pathid.
+    They mean different for retransmitted packets.
+    */
+    RTPHeader header;
+    parsed_packet.GetHeader(&header);
+    if(header.extension.sandy!=parsed_packet.pathid){
+      int is_audio=0;
+      if(media_type == MediaType::AUDIO)
+        is_audio=1;
+      RTC_LOG(INFO)<<"sandyrtx: This must retranmission of RTP path= "<<header.extension.sandy<< 
+      ":"<<parsed_packet.subflow_id<<"connection path= "<<parsed_packet.pathid<<" is_audio? "<<is_audio;
+      if(header.extension.sandy==2 && parsed_packet.pathid==1){
+        //sandy: Packets are generated and before they are sent the second path broke and hence were
+        //sent in primary path. But the history and accounting is done for secondary path and hence
+        //for both transport and receiver they should be sent to second path.Remember since they flew in
+        //primary path,they can effect the timing delay of primary path
+        RTC_LOG(INFO)<<"sandyrtx the second path broke and packets flew in primary path";
+        parsed_packet.pathid=2;
+        parsed_packet.SetExtension<sandy>(2);//Only one path from here
+        parsed_packet.subflow_id=2;//only one path from here
+      }else if(header.extension.sandy==1 && parsed_packet.pathid==2){
+        RTC_LOG(INFO)<<"sandyrtx the primary path broke and packets flew in secondary path";
+        parsed_packet.pathid=1;
+        parsed_packet.SetExtension<sandy>(1);//Only one path from here
+        parsed_packet.subflow_id=1;//only one path from here
+      }else if((header.extension.sandy==3)||header.extension.sandy==0 || header.extension.sandy==1){
+        RTC_LOG(INFO)<<"sandyrtx received retranmission packet of path 1 header pathid="<< 
+        header.extension.sandy<<" connection pathid "<<parsed_packet.pathid;
+        parsed_packet.pathid=1;
+        parsed_packet.SetExtension<sandy>(1);//Only one path from here
+        parsed_packet.subflow_id=1;//only one path from here
+      }else{
+        //sandy: If the packets of RTP header 2 flows in path 1, it means second path was broken and
+        //hence all its packets were sent in primary path. But they should be sent to secondary path at 
+        //this receiver.
+        RTC_LOG(INFO)<<"sandyrtx received retranmission packet of path 2";
+        parsed_packet.pathid=2;
+        parsed_packet.SetExtension<sandy>(2);//Only one path from here
+        parsed_packet.subflow_id=2;//only one path from here
+      } 
+    }
   // RateCounters expect input parameter as int, save it as int,
   // instead of converting each time it is passed to RateCounter::Add below.
   int length = static_cast<int>(parsed_packet.size());
@@ -1359,32 +1402,6 @@ PacketReceiver::DeliveryStatus Call::DeliverRtp(MediaType media_type,
     }
   } else if (media_type == MediaType::VIDEO) {
     parsed_packet.set_payload_type_frequency(kVideoPayloadTypeFrequency);
-
-    /*Sandy: Since we already took care of retranmission of packets for TFB in above notifyBEWfunction
-    you can modify packets header path id now
-    */
-    /*sandy:check connection level pathid and RTP header level pathid.
-    They mean different for retransmitted packets.
-    */
-    RTPHeader header;
-    parsed_packet.GetHeader(&header);
-    if(header.extension.sandy!=parsed_packet.pathid){
-      RTC_LOG(INFO)<<"sandyrtx: This must retranmission of RTP path= "<<header.extension.sandy<< 
-      ":"<<parsed_packet.subflow_id<<"connection path= "<<parsed_packet.pathid;
-      if((header.extension.sandy==3)||header.extension.sandy==0 || header.extension.sandy==1){
-        RTC_LOG(INFO)<<"sandyrtx received retranmission packet of path 1 header pathid="<< 
-        header.extension.sandy<<" connection pathid "<<parsed_packet.pathid;
-        parsed_packet.pathid=1;
-        parsed_packet.SetExtension<sandy>(1);//Only one path from here
-        parsed_packet.subflow_id=1;//only one path from here
-      }else{
-        RTC_LOG(INFO)<<"sandyrtx received retranmission packet of path 2";
-        parsed_packet.pathid=2;
-        parsed_packet.SetExtension<sandy>(2);//Only one path from here
-        parsed_packet.subflow_id=2;//only one path from here
-      } 
-    }
-
     if (video_receiver_controller_.OnRtpPacket(parsed_packet)) {
       received_bytes_per_second_counter_.Add(length);
       received_video_bytes_per_second_counter_.Add(length);

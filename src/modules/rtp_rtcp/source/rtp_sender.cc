@@ -654,29 +654,29 @@ std::vector<std::unique_ptr<RtpPacketToSend>> RTPSender::GeneratePadding(
 bool RTPSender::SendToNetwork(std::unique_ptr<RtpPacketToSend> packet) {
   RTC_DCHECK(packet);
   int64_t now_ms = clock_->TimeInMilliseconds();
-  bool keyframe=false;
   auto packet_type = packet->packet_type();
-  bool audio=true;
   RTC_CHECK(packet_type) << "Packet type must be set before sending.";
 
   if (packet->capture_time_ms() <= 0) {
     packet->set_capture_time_ms(now_ms);
   }
-  if(packet->packet_type()==RtpPacketMediaType::kAudio){
-    RTC_LOG(INFO)<<"sandyaudio sending audio packet seq="<<packet->SequenceNumber();
-  }
-  if(packet->is_key_frame()){
-    keyframe=true;
-  }
+  
   std::vector<std::unique_ptr<RtpPacketToSend>> packets;
   packets.emplace_back(std::move(packet));
-  MPTrafficSplitImplementation(std::move(packets), 
-  (packet->headers_size()+packet->payload_size()+packet->padding_size()),keyframe,audio);//sandy: Send to traffic splitter
+  //sandy: All the audio packets should be just sent via primary path.Because the media channel used for Audio is different and
+  //it does not use any connection infomration. Hence it is always sent via primary path
+  for (auto& packet : packets){
+    packet->subflow_id=1;
+    packet->subflow_seq=sequence_number_p_++;
+    packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
+    packet->SetExtension<sandy>(packet->subflow_id);
+  }
+  paced_sender_->EnqueuePackets(std::move(packets));//Traffic is only in one single path
   return true;
 }
 //sandy: Traffic split function implementation
 void RTPSender::MPTrafficSplitImplementation(
-  std::vector<std::unique_ptr<RtpPacketToSend>> packets,int framesize,bool keyframe,bool audio){
+  std::vector<std::unique_ptr<RtpPacketToSend>> packets,int framesize,bool keyframe){
 
   //window based scheduler
   if((mpcollector_->MpGetScheduler().find("window")!=std::string::npos)&&mpcollector_->MpISsecondPathOpen()){
@@ -814,7 +814,6 @@ void RTPSender::EnqueuePackets(
   int64_t now_ms = clock_->TimeInMilliseconds();
   int framesize=0;
   bool keyframe=false;
-  bool audio=false;
   for (auto& packet : packets) {
     RTC_DCHECK(packet);
     RTC_CHECK(packet->packet_type().has_value())
@@ -829,7 +828,7 @@ void RTPSender::EnqueuePackets(
   }
   //sandy: Replace below function with MPTrafficImplementation()
  // paced_sender_->EnqueuePackets(std::move(packets));
-  MPTrafficSplitImplementation(std::move(packets),framesize,keyframe,audio);
+  MPTrafficSplitImplementation(std::move(packets),framesize,keyframe);
 }
 
 size_t RTPSender::FecOrPaddingPacketMaxRtpHeaderLength() const {

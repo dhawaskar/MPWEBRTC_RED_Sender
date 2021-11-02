@@ -78,8 +78,17 @@ void RemoteEstimatorProxy::IncomingPacket(int64_t arrival_time_ms,
   int64_t seq_p = 0,seq_s=0;
 
   if(header.extension.hassandy && header.extension.hasMpTransportSequenceNumber){
+    //sandy: When packets from second path flow in primary it means second connection
+    //was turned off and hence they flew in primary. But there is no accounting for those 
+    //packets in primary path. Hence I will make them as second path. This can effect the primary
+    //path delay time but it is okay
+    if(header.extension.sandy==2){
+      pathid=2;
+    }else if(header.extension.sandy==1){
+      pathid=1;
+    }
     //sandy: Retranmission packets should be counted too
-    if(header.extension.sandy<=0||header.extension.sandy==4||header.extension.sandy==1){
+    else if(header.extension.sandy<=0||header.extension.sandy==4||header.extension.sandy==1){
       pathid=1;
     }else{
       pathid=2;

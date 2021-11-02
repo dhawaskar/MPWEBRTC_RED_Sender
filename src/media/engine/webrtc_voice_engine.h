@@ -224,8 +224,11 @@ class WebRtcVoiceMediaChannel final : public VoiceMediaChannel,
   bool SendRtp(const uint8_t* data,
                size_t len,
                const webrtc::PacketOptions& options) override {
+
+    RTC_DCHECK(options.pathid>0);
     rtc::CopyOnWriteBuffer packet(data, len, kMaxRtpPacketLen);
     rtc::PacketOptions rtc_options;
+    rtc_options.pathid=options.pathid;
     rtc_options.packet_id = options.packet_id;
     if (DscpEnabled()) {
       rtc_options.dscp = PreferredDscp();
@@ -238,8 +241,10 @@ class WebRtcVoiceMediaChannel final : public VoiceMediaChannel,
   }
 
   bool SendRtcp(const uint8_t* data, size_t len,int pathid) override {
+    RTC_DCHECK(pathid>0);
     rtc::CopyOnWriteBuffer packet(data, len, kMaxRtpPacketLen);
     rtc::PacketOptions rtc_options;
+    rtc_options.pathid=pathid;
     if (DscpEnabled()) {
       rtc_options.dscp = PreferredDscp();
     }
