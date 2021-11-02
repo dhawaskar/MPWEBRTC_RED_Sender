@@ -1558,6 +1558,12 @@ int P2PTransportChannel::SendPacket(const char* data,
       second_connection_->stats().state<<" new? "<<second_connection_->stats().new_connection;
       mpcollector_->MpSetSecondPath(0);
       second_connection_broke_time=rtc::TimeMillis();
+    }else{
+       RTC_LOG(INFO)<<"sandyconnetion did not removed second connection "<<second_connection_->ToString()<< 
+      " stats Receing: "<<second_connection_->stats().receiving<<" Writable: "<< 
+      second_connection_->stats().writable<<" Timeout: "<<second_connection_->stats().timeout<<" state: "<< 
+      second_connection_->stats().state<<" new? "<<second_connection_->stats().new_connection; 
+      PingConnection(second_connection_);
     }
   }else if(second_connection_ && !mpcollector_->MpISsecondPathOpen()){
     PingConnection(second_connection_); //sandy: Try to ping to see if it opened again
@@ -2132,7 +2138,7 @@ void P2PTransportChannel::OnConnectionStateChange(Connection* connection) {
       RTC_LOG(LS_INFO)<<"sandyconnection ***** This connection is writable  *****\t from:"<< connection->ToString()<< 
       " stats Receing: "<<connection->stats().receiving<<" Writable: "<< 
       connection->stats().writable<<" Timeout: "<<connection->stats().timeout<<" state: "<<connection->stats().state<< 
-      " new? "<<connection->stats().new_connection<<" total time gap "<<time_gap;
+      " new? "<<connection->stats().new_connection<<" total time gap "<<time_gap<<"Primary connection:"<<selected_connection_->ToString();
     }
   }
   // else if(connection==selected_connection_){
