@@ -45,6 +45,8 @@
 #include "rtc_base/strings/json.h"
 #include "test/vcm_capturer.h"
 
+int Mpdevice=0;
+int num_devices=0;
 namespace {
 // Names used for a IceCandidate JSON object.
 const char kCandidateSdpMidName[] = "sdpMid";
@@ -84,11 +86,18 @@ class CapturerTrackSource : public webrtc::VideoTrackSource {
     if (!info) {
       return nullptr;
     }
-    int num_devices = info->NumberOfDevices();
+    num_devices = info->NumberOfDevices();
+    
     for (int i = 0; i < num_devices; ++i) {
+      if(Mpdevice>0 && Mpdevice-1==i && num_devices>1){
+        RTC_LOG(INFO)<<"sandycamera the number of devices "<<num_devices<<" skipping "<<i;
+        continue;
+      }
       capturer = absl::WrapUnique(
           webrtc::test::VcmCapturer::Create(kWidth, kHeight, kFps, i));
       if (capturer) {
+        Mpdevice=i+1;
+        RTC_LOG(INFO)<<"sandycamera the number of devices "<<num_devices<<"Device number "<<Mpdevice;
         return new rtc::RefCountedObject<CapturerTrackSource>(
             std::move(capturer));
       }
@@ -111,10 +120,11 @@ class CapturerTrackSource : public webrtc::VideoTrackSource {
 
 }  // namespace
 
-Conductor::Conductor(PeerConnectionClient* client, MainWindow* main_wnd)
-    : peer_id_(-1), loopback_(false), client_(client), main_wnd_(main_wnd) {
+Conductor::Conductor(PeerConnectionClient* client, MainWindow* main_wnd,MainWindow* mp_main_wnd)
+    : peer_id_(-1), loopback_(false), client_(client), main_wnd_(main_wnd),mp_main_wnd_(mp_main_wnd) {
   client_->RegisterObserver(this);
   main_wnd->RegisterObserver(this);
+  if(mp_main_wnd)mp_main_wnd_->RegisterObserver(this);
 }
 
 Conductor::~Conductor() {
@@ -154,8 +164,7 @@ bool Conductor::InitializePeerConnection() {
     main_wnd_->MessageBox("Error", "CreatePeerConnection failed", true);
     DeletePeerConnection();
   }
-
-  AddTracks();
+ AddTracks();
 
   return peer_connection_ != nullptr;
 }
@@ -208,6 +217,10 @@ bool Conductor::CreatePeerConnection(bool dtls) {
 void Conductor::DeletePeerConnection() {
   main_wnd_->StopLocalRenderer();
   main_wnd_->StopRemoteRenderer();
+  if(mp_main_wnd_){
+    mp_main_wnd_->StopLocalRenderer();
+    mp_main_wnd_->StopRemoteRenderer();
+  }
   peer_connection_ = nullptr;
   peer_connection_factory_ = nullptr;
   peer_id_ = -1;
@@ -220,6 +233,11 @@ void Conductor::EnsureStreamingUI() {
     if (main_wnd_->current_ui() != MainWindow::STREAMING)
       main_wnd_->SwitchToStreamingUI();
   }
+  if(mp_main_wnd_ && mp_main_wnd_->IsWindow()){
+    if (mp_main_wnd_->current_ui() != MainWindow::STREAMING)
+      mp_main_wnd_->SwitchToStreamingUI();
+  }
+  
 }
 
 //
@@ -230,15 +248,25 @@ void Conductor::OnAddTrack(
     rtc::scoped_refptr<webrtc::RtpReceiverInterface> receiver,
     const std::vector<rtc::scoped_refptr<webrtc::MediaStreamInterface>>&
         streams) {
-  RTC_LOG(INFO) << __FUNCTION__ << " " << receiver->id();
-  main_wnd_->QueueUIThreadCallback(NEW_TRACK_ADDED,
+  RTC_LOG(INFO) << __FUNCTION__ << " " << receiver->id()<<"media_type="<<receiver->media_type();
+  if(receiver->media_type()==1 && video_track_count==0){
+    main_wnd_->QueueUIThreadCallback(NEW_TRACK_ADDED,
                                    receiver->track().release());
+    video_track_count++;
+  }else if(mp_main_wnd_ && receiver->media_type()==1 && video_track_count==1){
+    mp_main_wnd_->QueueUIThreadCallback(MP_NEW_TRACK_ADDED,
+                                   receiver->track().release());
+  }else{
+    main_wnd_->QueueUIThreadCallback(NEW_TRACK_ADDED,
+                                   receiver->track().release());
+  }
 }
 
 void Conductor::OnRemoveTrack(
     rtc::scoped_refptr<webrtc::RtpReceiverInterface> receiver) {
   RTC_LOG(INFO) << __FUNCTION__ << " " << receiver->id();
   main_wnd_->QueueUIThreadCallback(TRACK_REMOVED, receiver->track().release());
+  if(mp_main_wnd_)mp_main_wnd_->QueueUIThreadCallback(TRACK_REMOVED, receiver->track().release());
 }
 
 void Conductor::OnIceCandidate(const webrtc::IceCandidateInterface* candidate) {
@@ -282,6 +310,7 @@ void Conductor::OnIceCandidate(const webrtc::IceCandidateInterface* candidate) {
 void Conductor::OnSignedIn() {
   RTC_LOG(INFO) << __FUNCTION__;
   main_wnd_->SwitchToPeerList(client_->peers());
+  if(mp_main_wnd_)mp_main_wnd_->SwitchToPeerList(client_->peers());//sandycamera: Here is where you need to add all the other windows.
 }
 
 void Conductor::OnDisconnected() {
@@ -291,6 +320,8 @@ void Conductor::OnDisconnected() {
 
   if (main_wnd_->IsWindow())
     main_wnd_->SwitchToConnectUI();
+  if (mp_main_wnd_ &&mp_main_wnd_->IsWindow())
+    mp_main_wnd_->SwitchToConnectUI();
 }
 
 void Conductor::OnPeerConnected(int id, const std::string& name) {
@@ -417,6 +448,8 @@ void Conductor::OnMessageFromPeer(int peer_id, const std::string& message) {
 void Conductor::OnMessageSent(int err) {
   // Process the next pending message if any.
   main_wnd_->QueueUIThreadCallback(SEND_MESSAGE_TO_PEER, NULL);
+  if(mp_main_wnd_)mp_main_wnd_->QueueUIThreadCallback(SEND_MESSAGE_TO_PEER, NULL);
+
 }
 
 void Conductor::OnServerConnectionFailure() {
@@ -450,23 +483,17 @@ void Conductor::ConnectToPeer(int peer_id) {
     return;
   }
 
-  /*if (InitializePeerConnection()) {
-    peer_id_ = peer_id;
-    peer_connection_->CreateOffer(
-        this, webrtc::PeerConnectionInterface::RTCOfferAnswerOptions());
-  } else {
-    main_wnd_->MessageBox("Error", "Failed to initialize PeerConnection", true);
-  }*/
+  
   if (InitializePeerConnection()) {
-    using RTCOfferAnswerOptions =  webrtc::PeerConnectionInterface::RTCOfferAnswerOptions;
-    RTCOfferAnswerOptions sandy_options;
-    sandy_options.offer_to_receive_video=0;
-    sandy_options.offer_to_receive_audio=0;
-    sandy_options.raw_packetization_for_video=true;
+    // using RTCOfferAnswerOptions =  webrtc::PeerConnectionInterface::RTCOfferAnswerOptions;
+    // RTCOfferAnswerOptions sandy_options;
+    // sandy_options.offer_to_receive_video=0;
+    // sandy_options.offer_to_receive_audio=0;
+    // sandy_options.raw_packetization_for_video=true;
     peer_id_ = peer_id;
     peer_connection_->CreateOffer(
-        this, sandy_options);//sandy: Adding options to turn off video and audio
-        // this, webrtc::PeerConnectionInterface::RTCOfferAnswerOptions());
+        // this, sandy_options);//sandy: Adding options to turn off video and audio
+        this, webrtc::PeerConnectionInterface::RTCOfferAnswerOptions());
   } else {
     main_wnd_->MessageBox("Error", "Failed to initialize PeerConnection", true);
   }
@@ -499,11 +526,26 @@ void Conductor::AddTracks() {
       RTC_LOG(LS_ERROR) << "Failed to add video track to PeerConnection: "
                         << result_or_error.error().message();
     }
+    main_wnd_->SwitchToStreamingUI();
   } else {
     RTC_LOG(LS_ERROR) << "OpenVideoCaptureDevice failed";
   }
-
-  main_wnd_->SwitchToStreamingUI();
+  //Sandycamera: Add onother yet same video track
+  if(num_devices>1){
+    rtc::scoped_refptr<CapturerTrackSource> video_device1 =
+      CapturerTrackSource::Create();
+    rtc::scoped_refptr<webrtc::VideoTrackInterface> video_track_1(
+      peer_connection_factory_->CreateVideoTrack("MpWebRTCTrack", video_device1));
+    if(mp_main_wnd_)mp_main_wnd_->StartLocalRenderer(video_track_1);
+      result_or_error = peer_connection_->AddTrack(video_track_1, {"MpWebRTCStream"});
+      if (!result_or_error.ok()) {
+        RTC_LOG(LS_ERROR) << "Failed to add video track to PeerConnection: "
+                          << result_or_error.error().message();
+     }
+     if(mp_main_wnd_)mp_main_wnd_->SwitchToStreamingUI();
+  }else {
+    RTC_LOG(LS_ERROR) << "OpenVideoCaptureDevice for second camera failed";
+  }  
 }
 
 void Conductor::DisconnectFromCurrentPeer() {
@@ -561,9 +603,23 @@ void Conductor::UIThreadCallback(int msg_id, void* data) {
       break;
     }
 
+    case MP_NEW_TRACK_ADDED: {
+      
+      auto* track = reinterpret_cast<webrtc::MediaStreamTrackInterface*>(data);
+      if(track->kind() == webrtc::MediaStreamTrackInterface::kVideoKind){
+        RTC_LOG(INFO)<<" ***** sandycamera second track being added  and put it in seperate window****";
+        auto* video_track = static_cast<webrtc::VideoTrackInterface*>(track);
+        if(mp_main_wnd_)mp_main_wnd_->StartRemoteRenderer(video_track);
+      }
+      track->Release();
+      break;
+    }
+
     case NEW_TRACK_ADDED: {
+      
       auto* track = reinterpret_cast<webrtc::MediaStreamTrackInterface*>(data);
       if (track->kind() == webrtc::MediaStreamTrackInterface::kVideoKind) {
+        RTC_LOG(INFO)<<" ***** sandycamera new track being added ****";
         auto* video_track = static_cast<webrtc::VideoTrackInterface*>(track);
         main_wnd_->StartRemoteRenderer(video_track);
       }

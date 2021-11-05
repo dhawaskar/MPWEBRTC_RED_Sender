@@ -35,15 +35,18 @@ class Conductor : public webrtc::PeerConnectionObserver,
                   public PeerConnectionClientObserver,
                   public MainWndCallback {
  public:
+
+  int video_track_count=0;
   enum CallbackID {
     MEDIA_CHANNELS_INITIALIZED = 1,
     PEER_CONNECTION_CLOSED,
     SEND_MESSAGE_TO_PEER,
     NEW_TRACK_ADDED,
+    MP_NEW_TRACK_ADDED,
     TRACK_REMOVED,
   };
 
-  Conductor(PeerConnectionClient* client, MainWindow* main_wnd);
+  Conductor(PeerConnectionClient* client, MainWindow* main_wnd,MainWindow* mp_main_wnd);
 
   bool connection_active() const;
 
@@ -127,6 +130,7 @@ class Conductor : public webrtc::PeerConnectionObserver,
       peer_connection_factory_;
   PeerConnectionClient* client_;
   MainWindow* main_wnd_;
+  MainWindow* mp_main_wnd_;
   std::deque<std::string*> pending_messages_;
   std::string server_;
 };

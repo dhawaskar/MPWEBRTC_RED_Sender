@@ -90,11 +90,16 @@ int main(int argc, char* argv[]) {
   }
 
   const std::string server = absl::GetFlag(FLAGS_server);
+  GtkMainWnd mp_wnd(server.c_str(), 0,
+                 absl::GetFlag(FLAGS_autoconnect),
+                 absl::GetFlag(FLAGS_autocall));;
+  mp_wnd.Create();//sandy
+  
+  
   GtkMainWnd wnd(server.c_str(), absl::GetFlag(FLAGS_port),
                  absl::GetFlag(FLAGS_autoconnect),
                  absl::GetFlag(FLAGS_autocall));
   wnd.Create();
-
   CustomSocketServer socket_server(&wnd);
   rtc::AutoSocketServerThread thread(&socket_server);
 
@@ -102,7 +107,7 @@ int main(int argc, char* argv[]) {
   // Must be constructed after we set the socketserver.
   PeerConnectionClient client;
   rtc::scoped_refptr<Conductor> conductor(
-      new rtc::RefCountedObject<Conductor>(&client, &wnd));
+      new rtc::RefCountedObject<Conductor>(&client, &wnd,&mp_wnd));
   socket_server.set_client(&client);
   socket_server.set_conductor(conductor);
 
@@ -110,6 +115,7 @@ int main(int argc, char* argv[]) {
 
   // gtk_main();
   wnd.Destroy();
+  mp_wnd.Destroy();
 
   // TODO(henrike): Run the Gtk main loop to tear down the connection.
   /*

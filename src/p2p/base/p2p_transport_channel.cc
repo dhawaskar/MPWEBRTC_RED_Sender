@@ -1550,20 +1550,21 @@ int P2PTransportChannel::SendPacket(const char* data,
 
   if(mpcollector_->MpISsecondPathOpen()){//sandy: If second path is open then we should able to send and receive{
     ConnectionInfo stats = second_connection_->stats();
-    if(!stats.receiving || stats.timeout || !stats.writable || stats.state==IceCandidatePairState::FAILED){
+    if(!stats.receiving || stats.timeout || !stats.writable || stats.state==IceCandidatePairState::FAILED || !second_connection_->active()){
       //sandy: Second connection state change signal is not caught
       RTC_LOG(INFO)<<"sandyconnetion removed second connection "<<second_connection_->ToString()<< 
       " stats Receing: "<<second_connection_->stats().receiving<<" Writable: "<< 
       second_connection_->stats().writable<<" Timeout: "<<second_connection_->stats().timeout<<" state: "<< 
-      second_connection_->stats().state<<" new? "<<second_connection_->stats().new_connection;
+      second_connection_->stats().state<<" new? "<<second_connection_->stats().new_connection<<" active? "<<second_connection_->active();
       mpcollector_->MpSetSecondPath(0);
       second_connection_broke_time=rtc::TimeMillis();
     }else{
        RTC_LOG(INFO)<<"sandyconnetion did not removed second connection "<<second_connection_->ToString()<< 
       " stats Receing: "<<second_connection_->stats().receiving<<" Writable: "<< 
       second_connection_->stats().writable<<" Timeout: "<<second_connection_->stats().timeout<<" state: "<< 
-      second_connection_->stats().state<<" new? "<<second_connection_->stats().new_connection; 
-      PingConnection(second_connection_);
+      second_connection_->stats().state<<" new? "<<second_connection_->stats().new_connection<<" bytes receiev "<<second_connection_->stats().sent_bytes_second; 
+      if(second_connection_->stats().sent_bytes_second)
+        PingConnection(second_connection_);//sandy: sometime signal is not caught using any states so use ping only options.
     }
   }else if(second_connection_ && !mpcollector_->MpISsecondPathOpen()){
     PingConnection(second_connection_); //sandy: Try to ping to see if it opened again
@@ -2111,11 +2112,12 @@ void P2PTransportChannel::OnConnectionStateChange(Connection* connection) {
   if(selected_connection_){
     if(connection->ToString().find("sandyreceive?= -WI")!=std::string::npos && connection==second_connection_){
       mpcollector_->MpSetSecondPath(0);
+      second_connection_broke_time=rtc::TimeMillis();
       RTC_LOG(INFO)<<"sandyconnetion removed second connection "<<connection->ToString()<< 
       " stats Receing: "<<connection->stats().receiving<<" Writable: "<< 
       connection->stats().writable<<" Timeout: "<<connection->stats().timeout<<" state: "<<connection->stats().state<< 
       " new? "<<connection->stats().new_connection;
-      second_connection_broke_time=rtc::TimeMillis();
+      
     }else if( !mpcollector_->MpISsecondPathOpen() && connection->stats().receiving && !connection->stats().timeout && 
       connection->stats().state==IceCandidatePairState::IN_PROGRESS && 
               connection->stats().writable && connection->stats().new_connection==1){

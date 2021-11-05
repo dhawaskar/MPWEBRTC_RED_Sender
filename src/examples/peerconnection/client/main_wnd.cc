@@ -238,6 +238,8 @@ void MainWnd::OnPaint() {
   RECT rc;
   ::GetClientRect(handle(), &rc);
 
+  RTC_LOG(INFO)<<"sandycamera on paint";
+
   VideoRenderer* local_renderer = local_renderer_.get();
   VideoRenderer* remote_renderer = remote_renderer_.get();
   if (ui_ == STREAMING && remote_renderer && local_renderer) {
@@ -628,6 +630,7 @@ void MainWnd::VideoRenderer::OnFrame(const webrtc::VideoFrame& video_frame) {
                        image_.get(),
                        bmi_.bmiHeader.biWidth * bmi_.bmiHeader.biBitCount / 8,
                        buffer->width(), buffer->height());
+    RTC_LOG(INFO)<<"sandycamera the stream id of frame: "<<video_frame.stream_id;
   }
   InvalidateRect(wnd_, NULL, TRUE);
 }

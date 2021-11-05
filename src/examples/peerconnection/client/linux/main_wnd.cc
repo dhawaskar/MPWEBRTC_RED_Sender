@@ -209,6 +209,8 @@ void GtkMainWnd::StopLocalRenderer() {
 
 void GtkMainWnd::StartRemoteRenderer(
     webrtc::VideoTrackInterface* remote_video) {
+
+  RTC_LOG(INFO)<<"sandycamera started the remote rendering";
   remote_renderer_.reset(new VideoRenderer(this, remote_video));
 }
 
@@ -233,7 +235,6 @@ bool GtkMainWnd::Create() {
                      G_CALLBACK(&OnDestroyedCallback), this);
     g_signal_connect(window_, "key-press-event", G_CALLBACK(OnKeyPressCallback),
                      this);
-
     SwitchToConnectUI();
   }
 
@@ -345,6 +346,7 @@ void GtkMainWnd::SwitchToPeerList(const Peers& peers) {
 
 void GtkMainWnd::SwitchToStreamingUI() {
   RTC_LOG(INFO) << __FUNCTION__;
+  RTC_LOG(INFO)<<"sandycamera the drawing area is "<<draw_area_;
 
   RTC_DCHECK(draw_area_ == NULL);
 
@@ -370,19 +372,22 @@ void GtkMainWnd::OnDestroyed(GtkWidget* widget, GdkEvent* event) {
   port_edit_ = NULL;
   peer_list_ = NULL;
 }
-
+//sandycamera
 void GtkMainWnd::OnClicked(GtkWidget* widget) {
   // Make the connect button insensitive, so that it cannot be clicked more than
   // once.  Now that the connection includes auto-retry, it should not be
   // necessary to click it more than once.
+
+  RTC_LOG(INFO)<<"sandycamera clicked ";
   gtk_widget_set_sensitive(widget, false);
   server_ = gtk_entry_get_text(GTK_ENTRY(server_edit_));
   port_ = gtk_entry_get_text(GTK_ENTRY(port_edit_));
   int port = port_.length() ? atoi(port_.c_str()) : 0;
-  callback_->StartLogin(server_, port);
+  if(port>0)callback_->StartLogin(server_, port);//sandy: Because second window gives the second track
 }
 
 void GtkMainWnd::OnKeyPress(GtkWidget* widget, GdkEventKey* key) {
+  RTC_LOG(INFO)<<"sandycamera key pressed ";
   if (key->type == GDK_KEY_PRESS) {
     switch (key->keyval) {
 #if GTK_MAJOR_VERSION == 2
@@ -438,7 +443,7 @@ void GtkMainWnd::OnRowActivated(GtkTreeView* tree_view,
 
 void GtkMainWnd::OnRedraw() {
   gdk_threads_enter();
-
+  RTC_LOG(INFO)<<"sandycamera redraw called";
   VideoRenderer* remote_renderer = remote_renderer_.get();
   if (remote_renderer && remote_renderer->image() != NULL &&
       draw_area_ != NULL) {
@@ -496,7 +501,10 @@ void GtkMainWnd::OnRedraw() {
                           draw_buffer_.get(), (width_ * 2) * 4);
 #else
     gtk_widget_queue_draw(draw_area_);
+    RTC_LOG(INFO)<<"sandycamera drawing is done";
 #endif
+  }else{
+    RTC_LOG(INFO)<<"sandycamera drawing failed"; 
   }
 
   gdk_threads_leave();
@@ -545,6 +553,9 @@ void GtkMainWnd::VideoRenderer::SetSize(int width, int height) {
 }
 
 void GtkMainWnd::VideoRenderer::OnFrame(const webrtc::VideoFrame& video_frame) {
+
+
+  
   gdk_threads_enter();
 
   rtc::scoped_refptr<webrtc::I420BufferInterface> buffer(
@@ -567,6 +578,6 @@ void GtkMainWnd::VideoRenderer::OnFrame(const webrtc::VideoFrame& video_frame) {
                      buffer->height());
 
   gdk_threads_leave();
-
+  RTC_LOG(INFO)<<"sandycamera the stream id of frame: "<<video_frame.stream_id; 
   g_idle_add(Redraw, main_wnd_);
 }

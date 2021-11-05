@@ -11,7 +11,7 @@
 #include "media/engine/webrtc_video_engine.h"
 
 #include <stdio.h>
-
+#include <iterator>
 #include <algorithm>
 #include <set>
 #include <string>
@@ -2978,9 +2978,11 @@ void WebRtcVideoChannel::WebRtcVideoReceiveStream::
     stream_->RemoveSecondarySink(flexfec_stream_);
   }
 }
-
+//sandy: Received the frame
 void WebRtcVideoChannel::WebRtcVideoReceiveStream::OnFrame(
     const webrtc::VideoFrame& frame) {
+
+  
   rtc::CritScope crit(&sink_lock_);
 
   int64_t time_now_ms = rtc::TimeMillis();
@@ -2994,8 +2996,10 @@ void WebRtcVideoChannel::WebRtcVideoReceiveStream::OnFrame(
     RTC_LOG(LS_WARNING) << "VideoReceiveStream not connected to a VideoSink.";
     return;
   }
-
-  sink_->OnFrame(frame);
+  webrtc::VideoFrame cframe=frame;//sandy:Adding the stream id to frame
+  cframe.stream_id=stream_params_.id;  
+  RTC_LOG(INFO)<<"sandycamera the stream id of frame: "<<stream_params_.id<<" FrameID: "<<cframe.stream_id;
+  sink_->OnFrame(cframe);
 }
 
 bool WebRtcVideoChannel::WebRtcVideoReceiveStream::IsDefaultStream() const {

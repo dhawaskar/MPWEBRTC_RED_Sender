@@ -501,6 +501,7 @@ void VideoReceiveStream2::OnFrame(const VideoFrame& video_frame) {
       }));
 
   source_tracker_.OnFrameDelivered(video_frame.packet_infos());
+  RTC_LOG(INFO)<<"sandycamera the frame has been received";
   config_.renderer->OnFrame(video_frame);
 }
 

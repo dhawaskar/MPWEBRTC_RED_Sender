@@ -29,11 +29,13 @@ namespace webrtc {
 
 class RTC_EXPORT VideoFrame {
  public:
+  std::string stream_id;
   struct RTC_EXPORT UpdateRect {
     int offset_x;
     int offset_y;
     int width;
     int height;
+
 
     // Makes this UpdateRect a bounding box of this and other rect.
     void Union(const UpdateRect& other);
