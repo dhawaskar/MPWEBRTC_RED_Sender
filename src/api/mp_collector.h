@@ -83,6 +83,8 @@ public:
 	int rtt2_=0;
 	double loss1_=0;
 	double loss2_=0;
+	std::string second_connection_remote_address_;
+	std::string second_connecion_local_address_;
 
 	void MpStoreCandidate (std::string ip, int port,uint32_t priority,std::string transport_name, 
 		uint16_t network_id,uint16_t network_cost,std::string protocol) ;
@@ -193,7 +195,18 @@ public:
 	void MpSetLoss2(double loss2){ 
 		loss2_=loss2;
 	}
-
+	std::string MpGetSecondConnectionLocalAddress(){
+		return second_connecion_local_address_;
+	}
+	std::string MpGetSecondConnectionRemoteAddress(){
+		return second_connection_remote_address_;
+	}
+	void MpSetSecondConnectionLocalAddress(std::string second_connecion_local_addres){
+		second_connecion_local_address_=second_connecion_local_addres;
+	}
+	void MpSetSecondConnectionRemoteAddress(std::string second_connection_remote_address){
+		second_connection_remote_address_=second_connection_remote_address;
+	}
 };
 
 

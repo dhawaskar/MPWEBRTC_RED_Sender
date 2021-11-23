@@ -13,7 +13,8 @@
 #include <errno.h>
 #include <stdint.h>
 #include <string.h>
-
+#include "rtc_base/checks.h"
+#include "rtc_base/logging.h"
 #include "api/transport/stun.h"
 #include "rtc_base/byte_order.h"
 #include "rtc_base/checks.h"
@@ -87,6 +88,7 @@ int AsyncStunTCPSocket::Send(const void* pv,
   rtc::SentPacket sent_packet(options.packet_id, rtc::TimeMillis());
   sent_packet.pathid=options.pathid;//sandy: Copy the pathid infomartion.
   sent_packet.packet_mpid=options.packet_mpid;//sandy: Copy the pathid infomartion
+  RTC_DLOG(LS_ERROR)<<"sandychrome sending packet on the path "<<sent_packet.pathid<<"pathid: "<<sent_packet.pathid;
   SignalSentPacket(this, sent_packet);
 
   // We claim to have sent the whole thing, even if we only sent partial

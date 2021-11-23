@@ -485,15 +485,15 @@ void Conductor::ConnectToPeer(int peer_id) {
 
   
   if (InitializePeerConnection()) {
-    // using RTCOfferAnswerOptions =  webrtc::PeerConnectionInterface::RTCOfferAnswerOptions;
-    // RTCOfferAnswerOptions sandy_options;
-    // sandy_options.offer_to_receive_video=0;
-    // sandy_options.offer_to_receive_audio=0;
-    // sandy_options.raw_packetization_for_video=true;
+    using RTCOfferAnswerOptions =  webrtc::PeerConnectionInterface::RTCOfferAnswerOptions;
+    RTCOfferAnswerOptions sandy_options;
+    sandy_options.offer_to_receive_video=0;
+    sandy_options.offer_to_receive_audio=0;
+    sandy_options.raw_packetization_for_video=true;
     peer_id_ = peer_id;
     peer_connection_->CreateOffer(
-        // this, sandy_options);//sandy: Adding options to turn off video and audio
-        this, webrtc::PeerConnectionInterface::RTCOfferAnswerOptions());
+        this, sandy_options);//sandy: Adding options to turn off video and audio
+        // this, webrtc::PeerConnectionInterface::RTCOfferAnswerOptions());
   } else {
     main_wnd_->MessageBox("Error", "Failed to initialize PeerConnection", true);
   }

@@ -40,8 +40,6 @@
 int64_t mpreference_time=0;
 int64_t mpprint_time=0;
 int64_t second_connection_broke_time=0;
-int redscheduler=-1;//flag to indicate the redundant scheduler is enabled
-
 // int sandy_connection_wait=50; 
 
 // std::vector<cricket::Connection *> mp_second_connections;//connection that cannot talk to each other
@@ -1536,42 +1534,45 @@ int P2PTransportChannel::SendPacket(const char* data,
                                     size_t len,
                                     const rtc::PacketOptions& options,
                                     int flags) {
-
-  RTC_DCHECK_RUN_ON(network_thread_);
   int64_t now = rtc::TimeMillis();
   if(mpreference_time==0)
     mpreference_time=now;
   if(mpprint_time==0)
     mpreference_time=now;
-  // if(options.packet_id>0){
-  //   RTC_DCHECK(options.pathid>0);
-  // }
+  RTC_DCHECK_RUN_ON(network_thread_);
+  if(options.packet_id<0){
+    RTC_DCHECK(options.packet_id);
+  }
   if (flags != 0) {
     error_ = EINVAL;
     return -1;
   }
 
-  /*if(mpcollector_->MpISsecondPathOpen()){//sandy: If second path is open then we should able to send and receive{
-    ConnectionInfo stats = second_connection_->stats();
-    if(!stats.receiving || stats.timeout || !stats.writable || stats.state==IceCandidatePairState::FAILED || !second_connection_->active()){
-      //sandy: Second connection state change signal is not caught
-      RTC_LOG(INFO)<<"sandyconnetion removed second connection "<<second_connection_->ToString()<< 
-      " stats Receing: "<<second_connection_->stats().receiving<<" Writable: "<< 
-      second_connection_->stats().writable<<" Timeout: "<<second_connection_->stats().timeout<<" state: "<< 
-      second_connection_->stats().state<<" new? "<<second_connection_->stats().new_connection<<" active? "<<second_connection_->active();
-      mpcollector_->MpSetSecondPath(0);
-      second_connection_broke_time=rtc::TimeMillis();
-    }else{
-       RTC_LOG(INFO)<<"sandyconnetion did not removed second connection "<<second_connection_->ToString()<< 
-      " stats Receing: "<<second_connection_->stats().receiving<<" Writable: "<< 
-      second_connection_->stats().writable<<" Timeout: "<<second_connection_->stats().timeout<<" state: "<< 
-      second_connection_->stats().state<<" new? "<<second_connection_->stats().new_connection<<" bytes receiev "<<second_connection_->stats().sent_bytes_second; 
-      if(second_connection_->stats().sent_bytes_second)
-        PingConnection(second_connection_);//sandy: sometime signal is not caught using any states so use ping only options.
-    }
-  }else if(second_connection_ && !mpcollector_->MpISsecondPathOpen()){
-    PingConnection(second_connection_); //sandy: Try to ping to see if it opened again
-  i}*/
+  // if(mpcollector_->MpISsecondPathOpen()){//sandy: If second path is open then we should able to send and receive{
+  //   ConnectionInfo stats = second_connection_->stats();
+  //   if(!stats.receiving || stats.timeout || !stats.writable || stats.state==IceCandidatePairState::FAILED || !second_connection_->active()){
+  //     //sandy: Second connection state change signal is not caught
+  //     /*RTC_LOG(INFO)<<"sandyconnetion removed second connection "<<second_connection_->ToString()<< 
+  //     " stats Receing: "<<second_connection_->stats().receiving<<" Writable: "<< 
+  //     second_connection_->stats().writable<<" Timeout: "<<second_connection_->stats().timeout<<" state: "<< 
+  //     second_connection_->stats().state<<" new? "<<second_connection_->stats().new_connection<<" active? "<<second_connection_->active();*/
+  //     mpcollector_->MpSetSecondPath(0);
+  //     second_connection_broke_time=rtc::TimeMillis();
+  //   }
+  //   //else{
+  //     /* RTC_LOG(INFO)<<"sandyconnetion did not removed second connection "<<second_connection_->ToString()<< 
+  //     " stats Receing: "<<second_connection_->stats().receiving<<" Writable: "<< 
+  //     second_connection_->stats().writable<<" Timeout: "<<second_connection_->stats().timeout<<" state: "<< 
+  //     second_connection_->stats().state<<" new? "<<second_connection_->stats().new_connection<<" bytes receiev "<<second_connection_->stats().sent_bytes_second; */
+  //     // if(second_connection_->stats().sent_bytes_second){
+  //     //   RTC_DLOG(LS_ERROR)<<"sandychrome pinging second connection";
+  //     //   PingConnection(second_connection_);//sandy: sometime signal is not caught using any states so use ping only options.
+  //     // }
+  //   // }
+  // }
+  // else if(second_connection_ && !mpcollector_->MpISsecondPathOpen()){
+  //   PingConnection(second_connection_); //sandy: Try to ping to see if it opened again
+  // }
   // else if(selected_connection_ && second_connection_){
   //   ConnectionInfo stats = second_connection_->stats();
   //   if((selected_connection_->stats().remote_candidate.address().port()==stats.remote_candidate.address().port()) && 
@@ -1601,16 +1602,11 @@ int P2PTransportChannel::SendPacket(const char* data,
   modified_options.packet_mpid=options.packet_mpid;//sandy: Copy the Mp_Transport Seq
 
   int sent = -1;
-  if(redscheduler<0){
-    redscheduler=(mpcollector_->MpGetScheduler().find("red")!=std::string::npos)?1:0;
-  }
-  int issecondpathopen=(mpcollector_->MpISsecondPathOpen()?1:0);
-  RTC_DLOG(LS_ERROR)<<"This is non-red scheduler is red? "<<redscheduler<<" is second path open? "<<issecondpathopen;
-  // selected_connection_->Send(data, len, modified_options);
-  if(redscheduler && issecondpathopen){
 
+  // selected_connection_->Send(data, len, modified_options);
+  if(( mpcollector_->MpGetScheduler().find("red")!=std::string::npos) && mpcollector_->MpISsecondPathOpen()){
   //sandy: Both RTP and RTCP packets should be sent both paths. Best path packets are considered and hence best path RTT is used.
-    RTC_DLOG(LS_ERROR)<<"sandychrome choosing Red scheduler";
+
     modified_options.pathid=1;//sandy: Copy the pathid
     sent = selected_connection_->Send(data, len, modified_options);
     if (sent <= 0) {
@@ -1621,45 +1617,47 @@ int P2PTransportChannel::SendPacket(const char* data,
     modified_options.pathid=2;
     sent=second_connection_->Send(data, len, modified_options);
     if (sent <= 0) {
+      RTC_DLOG(LS_ERROR)<<"sandychrome failed to send on secondary path";
       RTC_DCHECK(sent < 0);
       error_ = second_connection_->GetError();
     }
   }
   else if(mpcollector_->MpISsecondPathOpen() && (options.pathid==2||options.pathid==3) ){
-    RTC_DLOG(LS_ERROR)<<"This is non-red scheduler";
     if(options.pathid==3){
       RTC_LOG(INFO)<<"sandyrtx retranmission of primary path packets onto secondary";
     }
     modified_options.pathid=2;
     sent=second_connection_->Send(data, len, modified_options);
     if (sent <= 0) {
+      RTC_DLOG(LS_ERROR)<<"sandychrome failed to send on secondary path";
       RTC_DCHECK(sent < 0);
       error_ = second_connection_->GetError();
-    }else{
-      RTC_DLOG(LS_ERROR)<<"sent packet on path id: "<<modified_options.pathid;
     }
   } 
   else{ 
-    RTC_DLOG(LS_ERROR)<<"This is non-red scheduler";
     if(options.pathid==4){
       RTC_LOG(INFO)<<"sandyrtx retranmission of secondary path packets onto primary";
     }
     modified_options.pathid=1;//sandy: Copy the pathid
     sent = selected_connection_->Send(data, len, modified_options);
+
     if (sent <= 0) {
       RTC_DCHECK(sent < 0);
        error_ = selected_connection_->GetError();
+      RTC_DLOG(LS_ERROR)<<"sandychrome sending packet on the primary path failed";
+    }else{
+      RTC_DLOG(LS_ERROR)<<"sandychrome sending packet on the primary path "<<modified_options.pathid;
     }
   }
   
 
 
   //sandy: Get the stats
-  // if(now- mpprint_time>1000 && mpcollector_->MpISsecondPathOpen() &&selected_connection_ && second_connection_){
-  //   RTC_LOG(INFO)<<"MpWebRTCStats "<<(selected_connection_->stats().sent_bytes_second*8)/1000<<" "<<(second_connection_->stats().sent_bytes_second*8)/1000<<" "<< 
-  //   mpcollector_->MpGetRTT1()<<" "<<mpcollector_->MpGetRTT2()<<" "<<mpcollector_->MpGetLoss1()<<" "<<mpcollector_->MpGetLoss2();
-  //   mpprint_time=now;
-  // }
+  if(now- mpprint_time>1000 && mpcollector_->MpISsecondPathOpen()){
+    RTC_LOG(INFO)<<"MpWebRTCStats "<<(selected_connection_->stats().sent_bytes_second*8)/1000<<" "<<(second_connection_->stats().sent_bytes_second*8)/1000<<" "<< 
+    mpcollector_->MpGetRTT1()<<" "<<mpcollector_->MpGetRTT2()<<" "<<mpcollector_->MpGetLoss1()<<" "<<mpcollector_->MpGetLoss2();
+    mpprint_time=now;
+  }
 
   return sent;
 }
@@ -2118,71 +2116,6 @@ bool P2PTransportChannel::GetUseCandidateAttr(Connection* conn) const {
 // When a connection's state changes, we need to figure out who to use as
 // the selected connection again.  It could have become usable, or become
 // unusable.
-// void P2PTransportChannel::OnConnectionStateChange(Connection* connection) {
-//   RTC_DCHECK_RUN_ON(network_thread_);
-
-//   if(selected_connection_){
-//     if(connection->ToString().find("sandyreceive?= -WI")!=std::string::npos && connection==second_connection_){
-//       mpcollector_->MpSetSecondPath(0);
-//       second_connection_broke_time=rtc::TimeMillis();
-//       RTC_LOG(INFO)<<"sandyconnetion removed second connection "<<connection->ToString()<< 
-//       " stats Receing: "<<connection->stats().receiving<<" Writable: "<< 
-//       connection->stats().writable<<" Timeout: "<<connection->stats().timeout<<" state: "<<connection->stats().state<< 
-//       " new? "<<connection->stats().new_connection;
-      
-//     }else if( !mpcollector_->MpISsecondPathOpen()){// && connection->stats().receiving && !connection->stats().timeout && 
-//       // connection->stats().state==IceCandidatePairState::IN_PROGRESS && 
-//       //         connection->stats().writable && connection->stats().new_connection==1){
-
-//       int64_t now=rtc::TimeMillis();
-//       int64_t time_gap= now- second_connection_broke_time;
-//       if(time_gap==now)
-//         time_gap=0;
-
-//       ConnectionInfo stats = connection->stats();
-
-//       if((selected_connection_->stats().remote_candidate.address().port()!=stats.remote_candidate.address().port()) && 
-//         (selected_connection_->stats().local_candidate.address().port()!=stats.local_candidate.address().port()) &&  
-//       (stats.local_candidate.type()=="local" && stats.remote_candidate.type()=="local") &&//||(stats.local_candidate.type()=="relay" &&  
-//      //    stats.remote_candidate.type()=="relay")) && 
-//         (stats.local_candidate.protocol()=="udp" && stats.remote_candidate.protocol()=="udp"))
-//       {
-//         second_connection_= connection;
-//         mpcollector_->MpSetSecondPath(1); 
-          //   mpcollector_->MpSetSecondConnectionLocalAddress(stats.local_candidate.address().ToString());
-          // mpcollector_->MpSetSecondConnectionRemoteAddress(stats.remote_candidate.address().ToString()); 
-//         RTC_LOG(LS_INFO)<<"sandyconnection ***** This connection is writable  ***** "<< connection->ToString()<< 
-//         " Primary connection:"<<selected_connection_->ToString();
-//       }else{
-//         RTC_LOG(LS_INFO)<<"sandyconnection ***** This connection is not writable  ***** "<< connection->ToString()<< 
-//         " Primary connection:"<<selected_connection_->ToString();
-//       }
-//     }
-//   }
-//   // else if(connection==selected_connection_){
-//   //   RTC_LOG(LS_INFO)<<"sandyconnection removed second connection cannot be done"<< connection->ToString()<< 
-//   //     " stats Receing: "<<connection->stats().receiving<<" Writable: "<< 
-//   //     connection->stats().writable<<" Timeout: "<<connection->stats().timeout<<" state: "<<connection->stats().state<< 
-//   //     " new? "<<connection->stats().new_connection;
-//   // }
-//   // May stop the allocator session when at least one connection becomes
-//   // strongly connected after starting to get ports and the local candidate of
-//   // the connection is at the latest generation. It is not enough to check
-//   // that the connection becomes weakly connected because the connection may be
-//   // changing from (writable, receiving) to (writable, not receiving).
-//   bool strongly_connected = !connection->weak();
-//   bool latest_generation = connection->local_candidate().generation() >=
-//                            allocator_session()->generation();
-//   if (strongly_connected && latest_generation) {
-//     MaybeStopPortAllocatorSessions();
-//   }
-//   // We have to unroll the stack before doing this because we may be changing
-//   // the state of connections while sorting.
-//   RequestSortAndStateUpdate(
-//       IceControllerEvent::CONNECT_STATE_CHANGE);  // "candidate pair state
-//                                                   // changed");
-// }
-
 void P2PTransportChannel::OnConnectionStateChange(Connection* connection) {
   RTC_DCHECK_RUN_ON(network_thread_);
 
@@ -2212,9 +2145,7 @@ void P2PTransportChannel::OnConnectionStateChange(Connection* connection) {
       {
         if(connection->stats().receiving){
           second_connection_= connection;
-          mpcollector_->MpSetSecondPath(1); 
-          mpcollector_->MpSetSecondConnectionLocalAddress(stats.local_candidate.address().ToString());
-          mpcollector_->MpSetSecondConnectionRemoteAddress(stats.remote_candidate.address().ToString());
+          mpcollector_->MpSetSecondPath(1);  
           RTC_DLOG(LS_ERROR)<<"sandychrome ***** This connection is writable  ***** "<< connection->ToString()<< 
         " Primary connection:"<<selected_connection_->ToString();
         }else{
@@ -2231,6 +2162,7 @@ void P2PTransportChannel::OnConnectionStateChange(Connection* connection) {
       }
     }
   }
+  
   // May stop the allocator session when at least one connection becomes
   // strongly connected after starting to get ports and the local candidate of
   // the connection is at the latest generation. It is not enough to check
@@ -2355,13 +2287,13 @@ void P2PTransportChannel::OnReadPacket(Connection* connection,
   if (connection == selected_connection_) {
     // Let the client know of an incoming packet
     // SignalReadPacket(this, data, len, packet_time_us, 0);
-    // RTC_DLOG(LS_ERROR)<<"sandychrome received packet on P1";
+    RTC_DLOG(LS_ERROR)<<"sandystats received packet on P1";
     SignalReadPacket(this, data, len, packet_time_us, 1);//sandy
     return;
   }else if(connection == second_connection_){
     // Let the client know of an incoming packet in secondary path
     // SignalReadPacket(this, data, len, packet_time_us, 0);
-    // RTC_DLOG(LS_ERROR)<<"sandychrome received packet on P2";
+    RTC_DLOG(LS_ERROR)<<"sandystats received packet on P2";
     SignalReadPacket(this, data, len, packet_time_us, 2);//sandy
     return;
   }
@@ -2384,8 +2316,7 @@ void P2PTransportChannel::OnReadPacket(Connection* connection,
 
 void P2PTransportChannel::OnSentPacket(const rtc::SentPacket& sent_packet) {
   RTC_DCHECK_RUN_ON(network_thread_);
-  // RTC_DLOG(LS_ERROR)<<"sandychrome sent packet on "<<sent_packet.pathid;
-  RTC_DCHECK(sent_packet.pathid>0);
+
   SignalSentPacket(this, sent_packet);
 }
 

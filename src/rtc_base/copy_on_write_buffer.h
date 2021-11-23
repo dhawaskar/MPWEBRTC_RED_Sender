@@ -59,7 +59,7 @@ class RTC_EXPORT CopyOnWriteBuffer {
       std::memcpy(buffer_->data(), data, size);
       offset_ = 0;
       size_ = size;
-      pathid_=capacity;
+      //pathid_=capacity;
     }
   }
 

@@ -86,6 +86,7 @@ int AsyncUDPSocket::SendTo(const void* pv,
   CopySocketInformationToPacketInfo(cb, *this, true, &sent_packet.info);
   sent_packet.pathid=options.pathid;//sandy: Copy the pathid infomartion.
   sent_packet.packet_mpid=options.packet_mpid;//sandy: Copy the pathid infomartion.
+  RTC_DLOG(LS_ERROR)<<"sandychrome sending packet on the path "<<sent_packet.pathid<<"pathid: "<<sent_packet.pathid;
   int ret = socket_->SendTo(pv, cb, addr);
   SignalSentPacket(this, sent_packet);
   return ret;

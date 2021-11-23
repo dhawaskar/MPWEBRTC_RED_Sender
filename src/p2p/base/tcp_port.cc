@@ -200,6 +200,8 @@ int TCPPort::SendTo(const void* data,
                     const rtc::SocketAddress& addr,
                     const rtc::PacketOptions& options,
                     bool payload) {
+
+  RTC_DLOG(LS_ERROR)<<"sandychrome sending packet on the path "<<options.pathid;
   rtc::AsyncPacketSocket* socket = NULL;
   TCPConnection* conn = static_cast<TCPConnection*>(GetConnection(addr));
 

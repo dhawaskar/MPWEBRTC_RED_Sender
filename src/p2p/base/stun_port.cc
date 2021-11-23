@@ -23,6 +23,8 @@
 #include "rtc_base/logging.h"
 #include "rtc_base/net_helpers.h"
 #include "rtc_base/strings/string_builder.h"
+#include "api/mp_collector.h"
+#include "api/mp_global.h"
 
 namespace cricket {
 
@@ -296,8 +298,16 @@ int UDPPort::SendTo(const void* data,
                     const rtc::SocketAddress& addr,
                     const rtc::PacketOptions& options,
                     bool payload) {
+
   rtc::PacketOptions modified_options(options);
   CopyPortInformationToPacketInfo(&modified_options.info_signaled_after_sent);
+  modified_options.pathid=options.pathid;
+ /* if(options.pathid<0){
+	  modified_options.pathid=2;
+  }*/
+
+  RTC_DLOG(LS_ERROR)<<"sandychrome sending packet on the path "<<modified_options.pathid<<"pathid: "<<options.pathid<<"obj:"<< 
+  typeid(socket_).name();
   int sent = socket_->SendTo(data, size, addr, modified_options);
   if (sent < 0) {
     error_ = socket_->GetError();
@@ -412,7 +422,28 @@ void UDPPort::OnReadPacket(rtc::AsyncPacketSocket* socket,
 
 void UDPPort::OnSentPacket(rtc::AsyncPacketSocket* socket,
                            const rtc::SentPacket& sent_packet) {
-  PortInterface::SignalSentPacket(sent_packet);
+  //sandy: In the chrome the packet path is different as it uses encryption and hence this path is taken instead of async_udp_socket.cc
+  //Hence I need to notify the path ID from here itself. When packet sent from above API, this signal is called. Hence we should set the 
+  //path here.
+  int pathid=0;
+  rtc::SentPacket modified_sent_packet;
+  if(mpcollector_){
+    if(socket_->GetLocalAddress().ToString().compare(mpcollector_->MpGetSecondConnectionLocalAddress())==0){
+      pathid=2;
+    }else{
+      pathid=1;
+    }
+    RTC_DLOG(LS_ERROR)<<"sandychrome sent packet on the path "<<sent_packet.pathid<<"pathid: "<<sent_packet.pathid<<  
+    "local address "<<socket_->GetLocalAddress().ToString()<<" from mpcollector "<<mpcollector_->MpGetSecondConnectionLocalAddress()<< 
+    "remote address"<<socket_->GetRemoteAddress().ToString()<<" from mpcollector "<<mpcollector_->MpGetSecondConnectionRemoteAddress()<< 
+    "pathID: "<<pathid;
+    modified_sent_packet=sent_packet;
+    modified_sent_packet.pathid=pathid;
+  }
+  if(modified_sent_packet.pathid>0)
+    PortInterface::SignalSentPacket(modified_sent_packet);
+  else
+    PortInterface::SignalSentPacket(sent_packet);
 }
 
 void UDPPort::OnReadyToSend(rtc::AsyncPacketSocket* socket) {

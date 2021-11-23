@@ -118,7 +118,7 @@ class Connection : public CandidatePairInterface,
   void mp_lost_connection_set(int val){
     mp_lost_connection_=val; 
   }
-  int mp_second_connection_time(){
+  int64_t mp_second_connection_time(){
     return mp_second_connection_time_;
   }
   void mp_second_connection_time_set(int64_t val){

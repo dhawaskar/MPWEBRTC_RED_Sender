@@ -441,6 +441,7 @@ void Connection::OnSendStunPacket(const void* data,
       rtc::PacketType::kIceConnectivityCheck;
   auto err =
       port_->SendTo(data, size, remote_candidate_.address(), options, false);
+  RTC_DLOG(LS_ERROR)<<"sandychrome the sending of stun packets";
   if (err < 0) {
     RTC_LOG(LS_WARNING) << ToString()
                         << ": Failed to send STUN ping "
@@ -1372,6 +1373,8 @@ ProxyConnection::ProxyConnection(Port* port,
 int ProxyConnection::Send(const void* data,
                           size_t size,
                           const rtc::PacketOptions& options) {
+
+  RTC_DLOG(LS_ERROR)<<"sandychrome sending the packet ";
   stats_.sent_total_packets++;
   int sent =
       port_->SendTo(data, size, remote_candidate_.address(), options, true);

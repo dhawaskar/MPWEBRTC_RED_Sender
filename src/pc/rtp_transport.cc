@@ -142,6 +142,8 @@ bool RtpTransport::SendPacket(bool rtcp,
                               rtc::CopyOnWriteBuffer* packet,
                               const rtc::PacketOptions& options,
                               int flags) {
+
+  RTC_DLOG(LS_ERROR)<<"sandychrome sending the paceet";
   rtc::PacketTransportInternal* transport = rtcp && !rtcp_mux_enabled_
                                                 ? rtcp_packet_transport_
                                                 : rtp_packet_transport_;

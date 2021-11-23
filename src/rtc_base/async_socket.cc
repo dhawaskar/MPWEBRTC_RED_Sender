@@ -11,7 +11,7 @@
 #include "rtc_base/async_socket.h"
 
 #include "rtc_base/checks.h"
-
+#include "rtc_base/logging.h"
 namespace rtc {
 
 AsyncSocket::AsyncSocket() {}
@@ -61,6 +61,7 @@ int AsyncSocketAdapter::Send(const void* pv, size_t cb) {
 int AsyncSocketAdapter::SendTo(const void* pv,
                                size_t cb,
                                const SocketAddress& addr) {
+  RTC_DLOG(LS_ERROR)<<"sandychrome sending packet on the path ";
   return socket_->SendTo(pv, cb, addr);
 }
 

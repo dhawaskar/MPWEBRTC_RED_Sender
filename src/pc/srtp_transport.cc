@@ -173,6 +173,7 @@ bool SrtpTransport::SendRtpPacket(rtc::CopyOnWriteBuffer* packet,
 
   // Update the length of the packet now that we've added the auth tag.
   packet->SetSize(len);
+  // RTC_DLOG(LS_ERROR)<<"sandychrome sending the paceet";
   return SendPacket(/*rtcp=*/false, packet, updated_options, flags);
 }
 
@@ -207,7 +208,7 @@ void SrtpTransport::OnRtpPacketReceived(rtc::CopyOnWriteBuffer packet,
                                         int64_t packet_time_us,int pathid) {
   RTC_LOG(INFO)<<"sandystats received packet on srtp "<<packet.GetPathid()<<":"<<pathid;
   RTC_DCHECK(packet.GetPathid()>0);  
-  //packet.SetPathid(pathid);
+  packet.SetPathid(pathid);
 
   if (!IsSrtpActive()) {
     RTC_LOG(LS_ERROR)
@@ -222,23 +223,26 @@ void SrtpTransport::OnRtpPacketReceived(rtc::CopyOnWriteBuffer packet,
   sandy: When the redundent scheduler in place, we filter out packets with same sequence numbers as we only use two paths in network and think
   it as one single path.
   */
-  if(( mpcollector_->MpGetScheduler().find("red")!=std::string::npos) && mpcollector_->MpISsecondPathOpen()){
+  // if(( mpcollector_->MpGetScheduler().find("red")!=std::string::npos) && mpcollector_->MpISsecondPathOpen()){
     
-    cricket::GetRtpSeqNum(data, len, &seq_num);
-    if(recv_seq_list_.find(seq_num)!= recv_seq_list_.end()){
-      return;
-    }else{
-      if(recv_seq_list_.size()>MPBUFFERSIZE)
-        recv_seq_list_.erase(recv_seq_list_.begin(),recv_seq_list_.end());
-      recv_seq_list_.insert ( std::pair<int,int>(seq_num,seq_num) );
-    }
-    RTC_LOG(INFO)<<"sandystats received packet on rtp_read seq= "<<seq_num<<" pathid= "<<packet.GetPathid()<<" global mp seq="<<recv_seq_list_[seq_num];
-    packet.SetPathid(1);//Only single path
-  }
+  //   cricket::GetRtpSeqNum(data, len, &seq_num);
+  //   if(recv_seq_list_.find(seq_num)!= recv_seq_list_.end()){
+  //     return;
+  //   }else{
+  //     if(recv_seq_list_.size()>MPBUFFERSIZE)
+  //       recv_seq_list_.erase(recv_seq_list_.begin(),recv_seq_list_.end());
+  //     recv_seq_list_.insert ( std::pair<int,int>(seq_num,seq_num) );
+  //   }
+  //   RTC_LOG(INFO)<<"sandystats received packet on rtp_read seq= "<<seq_num<<" pathid= "<<packet.GetPathid()<<" global mp seq="<<recv_seq_list_[seq_num];
+  //   packet.SetPathid(1);//Only single path
+  // }
   /*
   */
 
   if (!UnprotectRtp(data, len, &len)){// && packet.GetPathid()!=2) {//sandy : I am commeting this as packet from secondary path might be same
+    if(( mpcollector_->MpGetScheduler().find("red")!=std::string::npos) && mpcollector_->MpISsecondPathOpen()){
+      return;
+    }
     //as primary and cause some problems
     // int seq_num = -1;
     uint32_t ssrc = 0;
@@ -273,7 +277,7 @@ void SrtpTransport::OnRtcpPacketReceived(rtc::CopyOnWriteBuffer packet,
   char* data = packet.data<char>();
   int len = rtc::checked_cast<int>(packet.size());
   if (!UnprotectRtcp(data, len, &len)) {
-    if(( mpcollector_->MpGetScheduler().find("red")!=std::string::npos)){
+    if(( mpcollector_->MpGetScheduler().find("red")!=std::string::npos) && mpcollector_->MpISsecondPathOpen()){
       // RTC_LOG(INFO)<<"sandy duplicate RTCP packets being dropped from path= "<<packet.GetPathid();
       return;
     }

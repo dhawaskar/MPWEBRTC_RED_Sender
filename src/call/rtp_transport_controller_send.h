@@ -52,7 +52,7 @@ class RtpTransportControllerSend final
       public NetworkStateEstimateObserver {
  public:
   std::map<int64_t, int64_t> send_seq_list_;//sandy:global sequence number to drop packets for redunden scheulers
-  unsigned long MPBUFFERSIZE=10000;
+  unsigned long MPBUFFERSIZE=1000;
   RtpTransportControllerSend(
       Clock* clock,
       RtcEventLog* event_log,

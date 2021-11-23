@@ -432,30 +432,33 @@ void RtpTransportControllerSend::OnSentPacket(
     RTC_DCHECK_RUN_ON(&task_queue_);
     int pathid=sent_packet.pathid;
 
-    RTC_LOG(INFO)<<"sandystats sent packet on path id= "<<pathid<<"packet type = "<<(sent_packet.packet_id<0?"RTCP":"RTP");
+    if(sent_packet.packet_id >0){
+      // RTC_DLOG(LS_ERROR)<<"sandychrome the packet is sent on path id ="<<pathid<<"packet id:"<<sent_packet.packet_id;
+      RTC_DCHECK(pathid>0);
+    }
+
+    // RTC_DLOG(LS_ERROR)<<"sandychrome sent packet on path id= "<<pathid<<"packet type = "<<(sent_packet.packet_id<0?"RTCP":"RTP");
      /*
     sandy: When the redundent scheduler is in place,we should only use one single sender and receiver controller.Hence srtp_transport.cc 
     drops packets when redundant seq comes in and similarly at sender we should only not of unique sequence numbers
     */
     if(( mpcollector_->MpGetScheduler().find("red")!=std::string::npos) && mpcollector_->MpISsecondPathOpen() 
       &&sent_packet.packet_id>0){
-      if(send_seq_list_.find(sent_packet.packet_id)!= send_seq_list_.end()){
-        return;
-      }else{
-        if(send_seq_list_.size()>MPBUFFERSIZE)
-          send_seq_list_.erase(send_seq_list_.begin(),send_seq_list_.end());
-        send_seq_list_.insert ( std::pair<int,int>(sent_packet.packet_id,sent_packet.packet_id) );
-      }
-      RTC_LOG(INFO)<<"sandystats received packet on rtp_read seq= "<<sent_packet.packet_id<<" pathid= "<<sent_packet.pathid;
+      // if(send_seq_list_.find(sent_packet.packet_id)!= send_seq_list_.end()){
+      //   return;
+      // }else{
+      //   if(send_seq_list_.size()>MPBUFFERSIZE)
+      //     send_seq_list_.erase(send_seq_list_.begin(),send_seq_list_.end());
+      //   send_seq_list_.insert ( std::pair<int,int>(sent_packet.packet_id,sent_packet.packet_id) );
+      // }
+      // //sandy: Storing this cause problems in Google chrome so just use highest sequence number
+      // RTC_LOG(INFO)<<"sandystats received packet on rtp_read seq= "<<sent_packet.packet_id<<" pathid= "<<sent_packet.pathid;
       pathid=1;
     }
     /*
     */
 
-    if(sent_packet.packet_id != -1){
-      // RTC_LOG(INFO)<<"sandystats the packet is sent on path id ="<<pathid;
-      RTC_DCHECK(pathid>0);
-    }
+    
     
     /*Sandy: For Redundant scheduler, you sending the same packets on both path 1 and path 2  
     and hence do not account them on P1 and P2. Below is for RTCP packets,if you look in p2p_transport_channel.cc file we have sent 
@@ -493,6 +496,7 @@ void RtpTransportControllerSend::OnReceivedPacket(
     NetworkControlUpdate update1,update2;
     RTC_DCHECK_RUN_ON(&task_queue_);
     int pathid=packet_msg.pathid;
+
     //RTC_LOG(INFO)<<"sandystats received packet transport controller "<<pathid;
     if (controller_ && pathid!=2){
       update1=controller_->OnReceivedPacket(packet_msg);
@@ -596,6 +600,7 @@ void RtpTransportControllerSend::OnReceivedRtcpReceiverReport(
     int64_t rtt_ms,
     int64_t now_ms,int pathid) {
 
+  // RTC_DLOG(LS_ERROR)<<"sandychrome received packet on "<<pathid;
   task_queue_.PostTask([this, report_blocks, now_ms,pathid]() {
     RTC_DCHECK_RUN_ON(&task_queue_);
     OnReceivedRtcpReceiverReportBlocks(report_blocks, now_ms,pathid);

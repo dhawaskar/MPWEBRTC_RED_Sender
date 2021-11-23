@@ -92,6 +92,7 @@ rtc::StreamResult StreamInterfaceChannel::Write(const void* data,
   // Always succeeds, since this is an unreliable transport anyway.
   // TODO(zhihuang): Should this block if ice_transport_'s temporarily
   // unwritable?
+  RTC_LOG(INFO)<<"sandychrome writing the packet";
   rtc::PacketOptions packet_options;
   ice_transport_->SendPacket(static_cast<const char*>(data), data_len,
                              packet_options);
@@ -403,6 +404,8 @@ int DtlsTransport::SendPacket(const char* data,
                               size_t size,
                               const rtc::PacketOptions& options,
                               int flags) {
+
+  RTC_DLOG(LS_ERROR)<<"sandychrome sending the packet= "<<options.pathid<<" flags "<<flags;
   if (!dtls_active_) {
     // Not doing DTLS.
     return ice_transport_->SendPacket(data, size, options);
@@ -422,7 +425,7 @@ int DtlsTransport::SendPacket(const char* data,
         if (!IsRtpPacket(data, size)) {
           return -1;
         }
-
+        RTC_DLOG(LS_ERROR)<<"sandychrome sending the packet= "<<options.pathid<<" flags "<<flags;
         return ice_transport_->SendPacket(data, size, options);
       } else {
         return (dtls_->WriteAll(data, size, NULL, NULL) == rtc::SR_SUCCESS)
@@ -561,6 +564,7 @@ void DtlsTransport::OnReadPacket(rtc::PacketTransportInternal* transport,
                                  size_t size,
                                  const int64_t& packet_time_us,
                                  int flags) {
+  RTC_LOG(INFO)<<"sandychrome sending the packe flags "<<flags;
   RTC_DCHECK_RUN_ON(&thread_checker_);
   RTC_DCHECK(transport == ice_transport_);
 
@@ -645,6 +649,7 @@ void DtlsTransport::OnReadPacket(rtc::PacketTransportInternal* transport,
 void DtlsTransport::OnSentPacket(rtc::PacketTransportInternal* transport,
                                  const rtc::SentPacket& sent_packet) {
   RTC_DCHECK_RUN_ON(&thread_checker_);
+  RTC_DLOG(LS_ERROR)<<"sandychrome sent packet on the path "<<sent_packet.pathid<<"pathid: "<<sent_packet.pathid;
   SignalSentPacket(this, sent_packet);
 }
 

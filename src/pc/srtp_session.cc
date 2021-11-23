@@ -141,6 +141,9 @@ bool SrtpSession::UnprotectRtp(void* p, int in_len, int* out_len) {
   *out_len = in_len;
   int err = srtp_unprotect(session_, p, out_len);
   if (err != srtp_err_status_ok) {
+    if(( mpcollector_->MpGetScheduler().find("red")!=std::string::npos)){
+      return false;
+    }
     // Limit the error logging to avoid excessive logs when there are lots of
     // bad packets.
     const int kFailureLogThrottleCount = 100;

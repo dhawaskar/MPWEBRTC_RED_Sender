@@ -51,6 +51,7 @@ RemoteEstimatorProxy::RemoteEstimatorProxy(
       send_periodic_feedback_(true),
       previous_abs_send_time_(0),
       abs_send_timestamp_(clock->CurrentTime()) {
+  previous_abs_send_time_=previous_abs_send_time_+0;
   //sandy: Network state estimation is not computed in receiver and sent as the part of periodic feed back
   // RTC_LOG(INFO)
   //     << "sandytfb Maximum interval between transport feedback RTCP messages (ms): "
@@ -71,7 +72,7 @@ void RemoteEstimatorProxy::IncomingPacket(int64_t arrival_time_ms,
   }
   rtc::CritScope cs(&lock_);
   media_ssrc_ = header.ssrc;
-  int64_t seq = 0;
+  // int64_t seq = 0;
   //sandy: MpWebRTC implementationd details
   //First simply send the packets to specific path and then implement the contents.
   int pathid=-1,subflow_seq=-1;
@@ -209,24 +210,24 @@ void RemoteEstimatorProxy::IncomingPacket(int64_t arrival_time_ms,
   // if(header.extension.hasAbsoluteSendTime){
   //   RTC_DLOG(INFO)<<"sandy the header has abs_send_timestamp_s";
   // }
-  if (network_state_estimator_ && header.extension.hasAbsoluteSendTime) {//sandy:Not enabled so don't worry
+  // if (network_state_estimator_ && header.extension.hasAbsoluteSendTime) {//sandy:Not enabled so don't worry
 
-    //RTC_DLOG(INFO)<<"sandytfb network_state_estimator_ is part of feedback_packet\n";
-    PacketResult packet_result;
-    packet_result.receive_time = Timestamp::Millis(arrival_time_ms);
-    // Ignore reordering of packets and assume they have approximately the same
-    // send time.
-    abs_send_timestamp_ += std::max(
-        header.extension.GetAbsoluteSendTimeDelta(previous_abs_send_time_),
-        TimeDelta::Millis(0));
-    previous_abs_send_time_ = header.extension.absoluteSendTime;
-    packet_result.sent_packet.send_time = abs_send_timestamp_;
-    // TODO(webrtc:10742): Take IP header and transport overhead into account.
-    packet_result.sent_packet.size =
-        DataSize::Bytes(header.headerLength + payload_size);
-    packet_result.sent_packet.sequence_number = seq;
-    network_state_estimator_->OnReceivedPacket(packet_result);
-  }
+  //   //RTC_DLOG(INFO)<<"sandytfb network_state_estimator_ is part of feedback_packet\n";
+  //   PacketResult packet_result;
+  //   packet_result.receive_time = Timestamp::Millis(arrival_time_ms);
+  //   // Ignore reordering of packets and assume they have approximately the same
+  //   // send time.
+  //   abs_send_timestamp_ += std::max(
+  //       header.extension.GetAbsoluteSendTimeDelta(previous_abs_send_time_),
+  //       TimeDelta::Millis(0));
+  //   previous_abs_send_time_ = header.extension.absoluteSendTime;
+  //   packet_result.sent_packet.send_time = abs_send_timestamp_;
+  //   // TODO(webrtc:10742): Take IP header and transport overhead into account.
+  //   packet_result.sent_packet.size =
+  //       DataSize::Bytes(header.headerLength + payload_size);
+  //   packet_result.sent_packet.sequence_number = seq;
+  //   network_state_estimator_->OnReceivedPacket(packet_result);
+  // }
 }
 
 bool RemoteEstimatorProxy::LatestEstimate(std::vector<unsigned int>* ssrcs,
@@ -258,13 +259,12 @@ void RemoteEstimatorProxy::Process() {
 }
 
 void RemoteEstimatorProxy::OnBitrateChanged(int bitrate_bps) {
-
   // TwccReportSize = Ipv4(20B) + UDP(8B) + SRTP(10B) +
   // AverageTwccReport(30B)
   // TwccReport size at 50ms interval is 24 byte.
   // TwccReport size at 250ms interval is 36 byte.
   // AverageTwccReport = (TwccReport(50ms) + TwccReport(250ms)) / 2
-  constexpr int kTwccReportSize = 20 + 8 + 10 + 30;//sandy: Changing from 30 to 32
+  constexpr int kTwccReportSize = 20 + 8 + 10 + 30;
   const double kMinTwccRate =
       kTwccReportSize * 8.0 * 1000.0 / send_config_.max_interval->ms();
   const double kMaxTwccRate =
@@ -276,10 +276,10 @@ void RemoteEstimatorProxy::OnBitrateChanged(int bitrate_bps) {
       0.5 + kTwccReportSize * 8.0 * 1000.0 /
                 rtc::SafeClamp(send_config_.bandwidth_fraction * bitrate_bps,
                                kMinTwccRate, kMaxTwccRate));
-  //sandy I added this. Since bitrate update is summation of both path, interval could be too small and hence I increase it by 2
-  //send_interval_ms_*=2;
-  //RTC_LOG(INFO)<<" sandy the interval for sending the Transport feedback "<<send_interval_ms_;
+  send_interval_ms_*=2;//sandy: Bitratechanged is summation of two paths and hence time should be doubled
 }
+
+
 
 void RemoteEstimatorProxy::SetSendPeriodicFeedback(
     bool send_periodic_feedback) {
@@ -309,8 +309,7 @@ void RemoteEstimatorProxy::SendPeriodicFeedbacks() {
     last_process_time_ms_p_=clock_->TimeInMilliseconds();
   }
   else{
-    if(periodic_window_start_seq_p_){  
-      //&& (clock_->TimeInMilliseconds()-last_process_time_ms_p_ >send_interval_ms_)){
+    if(periodic_window_start_seq_p_ && (clock_->TimeInMilliseconds()-last_process_time_ms_p_ >send_interval_ms_)){
       //RTC_DLOG(LS_ERROR)<<"sandytferror sending RTCP feedback Primary starting at "<< 
       *periodic_window_start_seq_p_;
       for (auto begin_iterator = packet_arrival_times_p_.lower_bound(*periodic_window_start_seq_p_);begin_iterator != packet_arrival_times_p_.cend(); 
@@ -336,8 +335,7 @@ void RemoteEstimatorProxy::SendPeriodicFeedbacks() {
   if(last_process_time_ms_s_<0){
     last_process_time_ms_s_=clock_->TimeInMilliseconds();
   }else{
-    if (periodic_window_start_seq_s_){    
-    //&&(clock_->TimeInMilliseconds()-last_process_time_ms_s_ >send_interval_ms_)){//sandy: Secondary feedback count should be greater.
+    if (periodic_window_start_seq_s_ && (clock_->TimeInMilliseconds()-last_process_time_ms_s_ >send_interval_ms_)){//sandy: Secondary feedback count should be greater.
       // RTC_DLOG(LS_ERROR)<<"sandytferror sending RTCP feedback secondary";
       for (auto begin_iterator = packet_arrival_times_s_.lower_bound(*periodic_window_start_seq_s_);begin_iterator != packet_arrival_times_s_.cend(); 
          begin_iterator = packet_arrival_times_s_.lower_bound(*periodic_window_start_seq_s_)) { 

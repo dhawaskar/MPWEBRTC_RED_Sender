@@ -443,7 +443,7 @@ void GtkMainWnd::OnRowActivated(GtkTreeView* tree_view,
 
 void GtkMainWnd::OnRedraw() {
   gdk_threads_enter();
-  RTC_LOG(INFO)<<"sandycamera redraw called";
+  // RTC_LOG(INFO)<<"sandycamera redraw called";
   VideoRenderer* remote_renderer = remote_renderer_.get();
   if (remote_renderer && remote_renderer->image() != NULL &&
       draw_area_ != NULL) {
@@ -501,10 +501,8 @@ void GtkMainWnd::OnRedraw() {
                           draw_buffer_.get(), (width_ * 2) * 4);
 #else
     gtk_widget_queue_draw(draw_area_);
-    RTC_LOG(INFO)<<"sandycamera drawing is done";
+    // RTC_LOG(INFO)<<"sandycamera drawing is done";
 #endif
-  }else{
-    RTC_LOG(INFO)<<"sandycamera drawing failed"; 
   }
 
   gdk_threads_leave();
