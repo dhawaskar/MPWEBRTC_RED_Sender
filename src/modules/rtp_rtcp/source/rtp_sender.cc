@@ -210,8 +210,8 @@ RTPSender::RTPSender(const RtpRtcpInterface::Configuration& config,
       supports_bwe_extension_(false),
       retransmission_rate_limiter_(config.retransmission_rate_limiter) {
 
+
   if(!mpcollector_){
-    //RTC_LOG(INFO)<<"MpCollector pointer:created newly\n";
     mpcollector_=new MpCollector();
   }     
   // This random initialization is not intended to be cryptographic strong.
@@ -717,6 +717,26 @@ void RTPSender::MPTrafficSplitImplementation(
           }
           ratio_count++;
         }
+      }else if(mpcollector_->MpGetFullSignal() && mpcollector_->MpGetFullSignaledPathId()==1 && 
+      mpcollector_->MpISsecondPathOpen()){//sandy:Check for the full signal in primary path
+        RTC_LOG(INFO)<<"sandyofo: all packets via P1 "<<packets.size();
+        //sandy: Send all the packets via second path
+        for (auto& packet : packets){
+          packet->subflow_id=2;
+          packet->subflow_seq=sequence_number_s_++;
+          packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
+          packet->SetExtension<sandy>(packet->subflow_id);
+        }
+      }else if(mpcollector_->MpGetFullSignal() && mpcollector_->MpGetFullSignaledPathId()==2 && //sandy:Check for the full signal in second path
+      mpcollector_->MpISsecondPathOpen()){
+        RTC_LOG(INFO)<<"sandyofo: all packets via P2 "<<packets.size();
+        //sandy: Send all the packets via primary path
+        for (auto& packet : packets){
+          packet->subflow_id=1;
+          packet->subflow_seq=sequence_number_p_++;
+          packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
+          packet->SetExtension<sandy>(packet->subflow_id);
+        }
       }else{
         double mpratio=0;
         mpratio=mpcollector_->MpGetRatio();
@@ -727,15 +747,25 @@ void RTPSender::MPTrafficSplitImplementation(
         }
         int p1=split;//Sandy:Best path share
         int p2=(packets.size()-split);//sandy:Worst path share
+        double alpha=1.0;
         if((packets.size()>2&& p2==0) || mpcollector_->MpGetLossBasedPathId()){
           p1=packets.size()-1;
           p2=1;
         }
         RTC_LOG(INFO)<<"sandyratio: Best:Worst "<<p1<<":"<<p2<<" ratio = "<<mpcollector_->MpGetRatio()<<" total "<<packets.size();
+        //sandy: Check for the Half signal and reduce the number of packets onto path that receives it
+        if(mpcollector_->MpGetHalfSignal()<1.0){
+          alpha*=mpcollector_->MpGetHalfSignal();
+          p2=p2*alpha;
+          if(p2<1.0)
+            p2=1;
+          p1=(packets.size()-p2);;
+          // RTC_LOG(INFO)<<"sandyofo the half signal is enabled for 2 p1= "<<p1<<" p2 "<<p2<<" total= "<<packets.size();
+        }
         if(mpcollector_->MpGetBestPathId()==1){
           ratio_count=0;
           for (auto& packet : packets){
-            if(ratio_count<=p2){
+            if(ratio_count<p2){
               packet->subflow_id=2;
               packet->subflow_seq=sequence_number_s_++;
               packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
@@ -751,7 +781,7 @@ void RTPSender::MPTrafficSplitImplementation(
         }else{
           ratio_count=0;
           for (auto& packet : packets){
-            if(ratio_count<=p2){
+            if(ratio_count<p2){
               packet->subflow_id=1;
               packet->subflow_seq=sequence_number_p_++;
               packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
@@ -776,8 +806,32 @@ void RTPSender::MPTrafficSplitImplementation(
     }
   }
   else{
+    double p1=0,p2=0;
+    double alpha=1/2;//For RR P2 always takes half of the packets
+    if(mpcollector_->MpGetHalfSignal()<1.0 && mpcollector_->MpGetHalfSignaledPathId()==2){
+      alpha*=mpcollector_->MpGetHalfSignal();
+      p2=packets.size()*alpha;
+      if(p2<1.0)
+        p2=1;
+      p1=packets.size()-p2;
+      // RTC_LOG(INFO)<<"sandyofo the half signal is enabled for 2 p1= "<<p1<<" p2 "<<p2<<" total= "<<packets.size();
+    }else if(mpcollector_->MpGetHalfSignal()<1.0 && mpcollector_->MpGetHalfSignaledPathId()==1){
+      alpha*=mpcollector_->MpGetHalfSignal();
+      p1=packets.size()*alpha;
+      if(p1<1.0)
+        p1=1;
+      p2=packets.size()-p1;
+      // RTC_LOG(INFO)<<"sandyofo the half signal is enabled for 1 p1= "<<p1<<" p2 "<<p2<<" total= "<<packets.size();
+    }else{
+      p2=packets.size();
+      p1=packets.size();
+    }
+    // RTC_LOG(LS_INFO)<<"sandyofo the total packets: "<<packets.size();
     for (auto& packet : packets) {
-      if(total_packets_sent%2==0 || !mpcollector_->MpISsecondPathOpen()){//sandy: Set into primary path
+      if(p1>0&&!(mpcollector_->MpGetFullSignal() && mpcollector_->MpGetFullSignaledPathId()==1 && mpcollector_->MpISsecondPathOpen()) 
+        &&(total_packets_sent%2==0 || !mpcollector_->MpISsecondPathOpen() ||  
+        (mpcollector_->MpGetFullSignal() && mpcollector_->MpGetFullSignaledPathId()==2 && mpcollector_->MpISsecondPathOpen()) 
+      || !p2) ){//sandy: Set into primary path
         // if(mpcollector_->MpISsecondPathOpen()==0){
         //   RTC_LOG(INFO)<<"sandyconnection second path is closed";
         // }
@@ -790,13 +844,15 @@ void RTPSender::MPTrafficSplitImplementation(
         packet->SetExtension<sandy>(0x1);
         packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
         //mpcollector_->pathid=1;//sandy: Need this for splitting traffic in p2p_transport_channel.cc
-      }else if(mpcollector_->MpISsecondPathOpen()){
+        p1--;
+      }else if(mpcollector_->MpISsecondPathOpen() && p2>0){
         // RTC_LOG(INFO)<<"sandy setting the secondary path";
         packet->subflow_id=2;
         packet->subflow_seq=sequence_number_s_++;
         //mpcollector_->pathid=2;//sandy: Need this for splitting traffic in p2p_transport_channel.cc
         packet->SetExtension<sandy>(0x2);
         packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
+        p2--;
       }
       if (total_packets_sent < 4294967295)  
         total_packets_sent++;

@@ -45,6 +45,11 @@
 #include "rtc_base/time_utils.h"
 #include "rtc_base/trace_event.h"
 #include "system_wrappers/include/ntp_time.h"
+#include "api/mp_collector.h"
+#include "api/mp_global.h"
+
+
+
 
 namespace webrtc {
 namespace {
@@ -170,8 +175,8 @@ RTCPReceiver::RTCPReceiver(const RtpRtcpInterface::Configuration& config,
       report_block_data_observer_(config.report_block_data_observer),
       packet_type_counter_observer_(config.rtcp_packet_type_counter_observer),
       num_skipped_packets_(0),
-      last_skipped_packets_warning_ms_(clock_->TimeInMilliseconds()) {
-  RTC_DCHECK(owner);
+      last_skipped_packets_warning_ms_(clock_->TimeInMilliseconds()){
+      RTC_DCHECK(owner);
 }
 
 RTCPReceiver::~RTCPReceiver() {}
@@ -858,7 +863,9 @@ void RTCPReceiver::HandleNack(const CommonHeader& rtcp_block,
 
 void RTCPReceiver::HandleApp(const rtcp::CommonHeader& rtcp_block,
                              PacketInformation* packet_information) {
+
   rtcp::App app;
+  static constexpr uint32_t Mpappname = rtcp::App::NameToInt("sand");
   if (app.Parse(rtcp_block)) {
     if (app.name() == rtcp::RemoteEstimate::kName &&
         app.sub_type() == rtcp::RemoteEstimate::kSubType) {
@@ -867,6 +874,20 @@ void RTCPReceiver::HandleApp(const rtcp::CommonHeader& rtcp_block,
         packet_information->network_state_estimate = estimate.estimate();
         return;
       }
+    }else if(app.sub_type()==1 && app.name()==Mpappname){
+      // RTC_LOG(INFO)<<"sandyofo check you received APP specific messages name: "<<app.name()<<" subtype: "<<app.sub_type()<< 
+      // "data: "<<app.data()[0]<<" pathid "<< 
+      rtcp_block.pathid();
+
+      if(app.data()[0]=='a'){
+        // RTC_LOG(INFO)<<rtc::TimeMillis()<<"sandyofo redcuce the traffic on slow path to one packet ";
+        mpcollector_->MpSetFullSignal();
+      }
+      if(app.data()[0]=='b'){
+        // RTC_LOG(INFO)<<rtc::TimeMillis()<<"sandyofo redcuce the traffic on slow path by half ";
+        mpcollector_->MpSetHalfSignal();
+      }
+      return;
     }
   }
   ++num_skipped_packets_;

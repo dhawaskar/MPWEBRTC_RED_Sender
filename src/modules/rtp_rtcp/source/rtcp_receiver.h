@@ -285,6 +285,8 @@ class RTCPReceiver final {
   int64_t last_skipped_packets_warning_ms_;
   rtcp::TransportFeedback  *MpCurrentSecondFeedback=nullptr;
   //rtcp::TransportFeedback  *MpPreviousSecondFeedback=nullptr;
+  // int64_t halfsignaltime RTC_GUARDED_BY(rtcp_receiver_lock_);
+  // int64_t fullsignaltime RTC_GUARDED_BY(rtcp_receiver_lock_);
 };
 }  // namespace webrtc
 #endif  // MODULES_RTP_RTCP_SOURCE_RTCP_RECEIVER_H_

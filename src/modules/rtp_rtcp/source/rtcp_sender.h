@@ -211,7 +211,9 @@ class RTCPSender final {
       RTC_EXCLUSIVE_LOCKS_REQUIRED(critical_section_rtcp_sender_);
   std::unique_ptr<rtcp::RtcpPacket> BuildTMMBN(const RtcpContext& context,const int pathid)
       RTC_EXCLUSIVE_LOCKS_REQUIRED(critical_section_rtcp_sender_);
-  std::unique_ptr<rtcp::RtcpPacket> BuildAPP(const RtcpContext& context,const int pathid)
+  std::unique_ptr<rtcp::RtcpPacket> BuildAPPHalf(const RtcpContext& context,const int pathid)
+      RTC_EXCLUSIVE_LOCKS_REQUIRED(critical_section_rtcp_sender_);
+  std::unique_ptr<rtcp::RtcpPacket> BuildAPPFull(const RtcpContext& context,const int pathid)
       RTC_EXCLUSIVE_LOCKS_REQUIRED(critical_section_rtcp_sender_);
   std::unique_ptr<rtcp::RtcpPacket> BuildLossNotification(
       const RtcpContext& context,const int pathid)

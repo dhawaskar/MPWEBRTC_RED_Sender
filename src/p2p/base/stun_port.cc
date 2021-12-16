@@ -296,8 +296,15 @@ int UDPPort::SendTo(const void* data,
                     const rtc::SocketAddress& addr,
                     const rtc::PacketOptions& options,
                     bool payload) {
+
   rtc::PacketOptions modified_options(options);
   CopyPortInformationToPacketInfo(&modified_options.info_signaled_after_sent);
+  modified_options.pathid=options.pathid;
+ /* if(options.pathid<0){
+	  modified_options.pathid=2;
+  }*/
+
+  RTC_DLOG(LS_ERROR)<<"sandychrome sending packet on the primary path "<<modified_options.pathid<<"pathid: "<<options.pathid;
   int sent = socket_->SendTo(data, size, addr, modified_options);
   if (sent < 0) {
     error_ = socket_->GetError();

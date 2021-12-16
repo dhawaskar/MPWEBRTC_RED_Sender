@@ -195,9 +195,16 @@ class RtpVideoStreamReceiver2 : public LossNotificationSender,
   
 
   std::deque<Frametimings> frame_timings_;
+  std::deque<Frametimings> frame_ifd_;
+  std::vector<int64_t> mp_gaps_;
+  std::vector<int64_t> mp_ifd_;
+  std::vector<int> mp_nack_;
   double mp_accumulated_timings_=0.0;
   double mp_smoothed_timings_=0.0;
+  double mp_smoothed_timings_ifd_=0.0;
   double mp_first_arrival_time_ms_=-1;
+  double signaled_gap_=0.0;
+  double signaled_ifd_=0.0;
   double prev_trend_=0.0;
   int num_of_deltas_=0;
   int64_t last_update_ms_=-1;

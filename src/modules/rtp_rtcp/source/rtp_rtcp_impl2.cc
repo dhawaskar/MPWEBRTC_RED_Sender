@@ -680,7 +680,14 @@ int64_t ModuleRtpRtcpImpl2::ExpectedRetransmissionTimeMs() const {
 // Force a send of an RTCP packet.: Usully when pli or fir is requested from receiver
 // Normal SR and RR are triggered via the process function.
 int32_t ModuleRtpRtcpImpl2::SendRTCP(RTCPPacketType packet_type) {//sandy: Request to send the Picture loss infromation:pli or key frame
-  //RTC_LOG(INFO)<<"sandyrtt sending RTCP report\n";
+  if(packet_type==kAppSubtypeMpHalf || packet_type==kAppSubtypeMpFull){
+    RTCPSender::FeedbackState state;
+    RTC_LOG(INFO)<<"sandyofo creating App specific message\n";
+    if(mpcollector_->MpGetBestPathId()==1)
+      return rtcp_sender_.SendRTCP(GetFeedbackStatePrimary(), packet_type,0,0,1);//sandy: Pli is sent via primary path
+    else 
+      return rtcp_sender_.SendRTCP(GetFeedbackStateSecondary(), packet_type,0,0,2);
+  }
 
   //sandy: This is sent on demand and send it for both paths
   if(!mpcollector_->MpISsecondPathOpen() || ( mpcollector_->MpGetScheduler().find("red")!=std::string::npos)){
@@ -688,8 +695,11 @@ int32_t ModuleRtpRtcpImpl2::SendRTCP(RTCPPacketType packet_type) {//sandy: Reque
   }else{
     //sandy: Always send this request via primary path
     // rtcp_sender_.SendRTCP(GetFeedbackStatePrimary(), packet_type,0,0,1);//sandy: Pli is sent via primary path
-    return rtcp_sender_.SendRTCP(GetFeedbackStateSecondary(), packet_type,0,0,1);//sandy: Pli is sent via primary path
-  }
+    if(mpcollector_->MpGetBestPathId()==1)
+      return rtcp_sender_.SendRTCP(GetFeedbackStatePrimary(), packet_type,0,0,1);//sandy: Pli is sent via primary path
+    else 
+      return rtcp_sender_.SendRTCP(GetFeedbackStateSecondary(), packet_type,0,0,2);
+  } 
 }
 
 void ModuleRtpRtcpImpl2::SetRtcpXrRrtrStatus(bool enable) {

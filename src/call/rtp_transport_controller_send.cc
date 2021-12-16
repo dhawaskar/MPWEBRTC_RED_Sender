@@ -125,6 +125,7 @@ RtpTransportControllerSend::RtpTransportControllerSend(
           "rtp_send_controller",
           TaskQueueFactory::Priority::HIGH)) {
 
+
   ParseFieldTrial({&relay_bandwidth_cap_},
                   trials->Lookup("WebRTC-Bwe-NetworkRouteConstraints"));
   initial_config_.constraints = ConvertConstraints(bitrate_config, clock_);
@@ -813,21 +814,27 @@ int RtpTransportControllerSend::MpFindBestPath(int64_t rtt1,int64_t rtt2,double 
   if(rtt1==0 || rtt2==0){
     return 1;
   }
-
+  rate1/=1000;
+  rate2/=1000;
   //sandy: Find the completion time
-  P1time= (double(1/rate1))+double(rtt1/1000);
-  P2time= (double(1/rate2))+double(rtt2/1000);
+  P1time= (double(1/rate1))+double(rtt1/2);
+  P2time= (double(1/rate2))+double(rtt2/2);
   mpcollector_->MpSetLossBasedPathId(0);
   if(P1time<=P2time)
     bestpath=1;
   else
     bestpath=2;
 
+  // if(rtt1<100 && rtt2 <100){
   if(loss1>=0.1 && loss2>=0.1){
-    if(loss1>loss2)
+    if(loss1>loss2){
       bestpath=2;
-    else
+      mpcollector_->MpSetLossBasedPathId(bestpath);
+    }
+    else{
       bestpath=1;
+      mpcollector_->MpSetLossBasedPathId(bestpath);
+    }
   }else if(loss1>=0.1 && loss1>loss2){
     bestpath=2;
     mpcollector_->MpSetLossBasedPathId(bestpath);
@@ -835,7 +842,19 @@ int RtpTransportControllerSend::MpFindBestPath(int64_t rtt1,int64_t rtt2,double 
     bestpath=1;
     mpcollector_->MpSetLossBasedPathId(bestpath);
   }
-  RTC_LOG(INFO)<<"sandyratio: bestpath= "<<bestpath;
+  // }
+
+  RTC_LOG(INFO)<<"sandyratio: bestpath= "<<bestpath<<" C1 time= "<<P1time<<" c2 time= "<<P2time;
+  //sandy: Check if there is Halfsignaled RTT set and if check if RTT has reduced and if then clear the half signal
+  if(rtt1>0 && mpcollector_->MpGetHalfSignal()<1.0 && mpcollector_->MpGetHalfSignaledPathId()==1 && 
+    (rtt1<=mpcollector_->MpGetHalfSignaledRtt()/4)){//&&  rtt1<100 
+    RTC_LOG(LS_INFO)<<"sandyofo clearing the half signal set on path 1 old RTT:"<<mpcollector_->MpGetHalfSignaledRtt()<<" new RTT: "<<rtt1;
+    mpcollector_->MpClearHalfSignal();
+  }else if(rtt2>0 && mpcollector_->MpGetHalfSignal()<1.0 && mpcollector_->MpGetHalfSignaledPathId()==2 && 
+    (rtt2<=mpcollector_->MpGetHalfSignaledRtt()/4)){ //&&   rtt2<100 
+    RTC_LOG(LS_INFO)<<"sandyofo clearing the half signal set on path 2 old RTT:"<<mpcollector_->MpGetHalfSignaledRtt()<<" new RTT: "<<rtt2;
+    mpcollector_->MpClearHalfSignal();
+  }
   return bestpath;
 }
 
@@ -861,8 +880,9 @@ void RtpTransportControllerSend::PostUpdates(NetworkControlUpdate update,Network
   if(mpcollector_->MpGetScheduler().find("window")!=std::string::npos&&mpcollector_->MpISsecondPathOpen())
     window_scheduler=1;
 
-  if( ( mpcollector_->MpGetScheduler().find("red")!=std::string::npos) || !mpcollector_->MpISsecondPathOpen()){//sandy: You have to check if redundant is in place
-    //!mpcollector_->MpISsecondPathOpen() ||
+  if((mpcollector_->MpGetScheduler().find("red")!=std::string::npos) || !mpcollector_->MpISsecondPathOpen() ||
+  (mpcollector_->MpGetFullSignal() && mpcollector_->MpGetFullSignaledPathId()==2 && 
+  mpcollector_->MpISsecondPathOpen())){//sandy: You have to check if redundant is in place or Fullsignal is set
     if (update.congestion_window) {
       pp_congestion_window=update.congestion_window;
       pacer()->SetCongestionWindow(*update.congestion_window);
@@ -879,6 +899,27 @@ void RtpTransportControllerSend::PostUpdates(NetworkControlUpdate update,Network
       control_handler_->SetTargetRate(*update.target_rate);
       UpdateControlState();
       pp_target_rate=update.target_rate;
+    }
+    // RTC_LOG(LS_INFO)<<"sandyofo the single path is triggered and primary path is used";
+  }else if(mpcollector_->MpGetFullSignal() && mpcollector_->MpGetFullSignaledPathId()==1 && 
+  mpcollector_->MpISsecondPathOpen()){//sandy: If the primary path has received the signal
+    // RTC_LOG(LS_INFO)<<"sandyofo the single path is triggered and secondary path is used";
+    if (update2.congestion_window) {
+      sp_congestion_window=update2.congestion_window;
+      pacer()->SetCongestionWindow(*update2.congestion_window);
+    }
+    if (update2.pacer_config) {
+      pacer()->SetPacingRates(update2.pacer_config->data_rate(),
+                              update2.pacer_config->pad_rate());
+      sp_pacer_config=update2.pacer_config;
+    }
+    for (const auto& probe : update2.probe_cluster_configs) {
+      pacer()->CreateProbeCluster(probe.target_data_rate, probe.id);
+    }
+    if (update2.target_rate) {
+      control_handler_->SetTargetRate(*update2.target_rate);
+      UpdateControlState();
+      sp_target_rate=update2.target_rate;
     }
   }else{
     if(update.congestion_window && update2.congestion_window){

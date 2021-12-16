@@ -15,6 +15,8 @@
 #include <memory>
 #include <utility>
 #include <vector>
+#include <numeric>
+
 
 #include "absl/algorithm/container.h"
 #include "absl/base/macros.h"
@@ -52,7 +54,15 @@
 #include "system_wrappers/include/metrics.h"
 #include "system_wrappers/include/ntp_time.h"
 #include "video/receive_statistics_proxy2.h"
+#include "api/mp_collector.h"
+#include "api/mp_global.h"
 
+int64_t sandy_start_time=0;
+int64_t sandy_end_time=0;
+int64_t sandy_previous_frame_time=0;
+int64_t sandy_time_window=0;
+int64_t full_signal_sent_count=0;
+int64_t packets_count=0;
 namespace webrtc {
 
 namespace {
@@ -60,6 +70,7 @@ namespace {
 //                 crbug.com/752886
 constexpr int kPacketBufferStartSize = 512;
 constexpr int kPacketBufferMaxSize = 2048;//2048
+constexpr int linearwindow=100;
 // int64_t sandy_key_request=0;
 int PacketBufferMaxSize() {
   // The group here must be a positive power of 2, in which case that is used as
@@ -136,7 +147,7 @@ RtpVideoStreamReceiver2::RtcpFeedbackBuffer::RtcpFeedbackBuffer(
 }
 
 void RtpVideoStreamReceiver2::RtcpFeedbackBuffer::RequestKeyFrame() {
-  RTC_LOG(INFO)<<"sandyofo the OFO increasing and buffer is full ";
+  // RTC_LOG(INFO)<<"sandyofo the OFO increasing and buffer is full ";
   RTC_DCHECK_RUN_ON(&worker_task_checker_);
   request_key_frame_ = true;
 }
@@ -202,7 +213,7 @@ void RtpVideoStreamReceiver2::RtcpFeedbackBuffer::SendBufferedRtcpFeedback() {
   }
 
   if (request_key_frame) {
-    RTC_LOG(INFO)<<"sandyofo the OFO increasing and buffer is full ";
+    // RTC_LOG(INFO)<<"sandyofo the OFO increasing and buffer is full ";
     key_frame_request_sender_->RequestKeyFrame();
   } 
   else{ 
@@ -500,6 +511,7 @@ void RtpVideoStreamReceiver2::OnReceivedPayloadData(
           kVideoPayloadTypeFrequency,
           packet->packet_info.absolute_capture_time()));
 
+  packet->packet_info.set_sandy_arrival_time(rtp_packet.arrival_time_ms());
   RTPVideoHeader& video_header = packet->video_header;
   video_header.rotation = kVideoRotation_0;
   video_header.content_type = VideoContentType::UNSPECIFIED;
@@ -622,7 +634,7 @@ void RtpVideoStreamReceiver2::OnReceivedPayloadData(
 
     switch (fixed.action) {
       case video_coding::H264SpsPpsTracker::kRequestKeyframe:
-        RTC_LOG(INFO)<<"sandyofo the OFO increasing and buffer is full ";
+        // RTC_LOG(INFO)<<"sandyofo the OFO increasing and buffer is full ";
         rtcp_feedback_buffer_.RequestKeyFrame();
         rtcp_feedback_buffer_.SendBufferedRtcpFeedback();
         ABSL_FALLTHROUGH_INTENDED;
@@ -739,7 +751,7 @@ void RtpVideoStreamReceiver2::RequestKeyFrame() {
   // issued by anything other than the LossNotificationController if it (the
   // sender) is relying on LNTF alone.
   if (keyframe_request_sender_) {
-    RTC_LOG(INFO)<<"sandyofo the OFO increasing and buffer is full ";
+    // RTC_LOG(INFO)<<"sandyofo the OFO increasing and buffer is full ";
     keyframe_request_sender_->RequestKeyFrame();
   } else {
     // RTC_LOG(INFO)<<"sandyofo the OFO increasing and buffer is full ";
@@ -828,15 +840,16 @@ void RtpVideoStreamReceiver2::OnInsertedPacket(
   int max_nack_count;
   int64_t min_recv_time;
   int64_t max_recv_time;
+  int64_t now_ms=clock_->TimeInMilliseconds();
   std::vector<rtc::ArrayView<const uint8_t>> payloads;
   RtpPacketInfos::vector_type packet_infos;
 
   bool frame_boundary = true;
   
   double arrival_time=clock_->CurrentNtpInMilliseconds();
-  int64_t sandy_start_time=0;
-  int64_t sandy_end_time=0;
+  packets_count=0;
   for (auto& packet : result.packets) {
+    packets_count++;
     // PacketBuffer promisses frame boundaries are correctly set on each
     // packet. Document that assumption with the DCHECKs.
     RTC_DCHECK_EQ(frame_boundary, packet->is_first_packet_in_frame());
@@ -847,7 +860,8 @@ void RtpVideoStreamReceiver2::OnInsertedPacket(
       max_recv_time = packet->packet_info.receive_time_ms();
       payloads.clear();
       packet_infos.clear();
-      sandy_start_time=packet->packet_info.receive_time_ms();
+      // sandy_start_time=packet->packet_info.receive_time_ms();
+      sandy_start_time=packet->packet_info.sandy_arrival_time();
     } else {
       max_nack_count = std::max(max_nack_count, packet->times_nacked);
       min_recv_time =
@@ -863,7 +877,8 @@ void RtpVideoStreamReceiver2::OnInsertedPacket(
       
       if(mp_first_arrival_time_ms_<0)
         mp_first_arrival_time_ms_=arrival_time;
-      sandy_end_time=packet->packet_info.receive_time_ms();
+      // sandy_end_time=packet->packet_info.receive_time_ms();
+      sandy_end_time=packet->packet_info.sandy_arrival_time();;
       auto depacketizer_it = payload_type_map_.find(first_packet->payload_type);
       RTC_CHECK(depacketizer_it != payload_type_map_.end());
 
@@ -873,9 +888,8 @@ void RtpVideoStreamReceiver2::OnInsertedPacket(
         // Failed to assemble a frame. Discard and continue.
         RTC_LOG(INFO)<<"sandyofo failed to assemble the frame";
         continue;
-      }else{
-        RTC_LOG(INFO)<<"sandyofo total time difference "<<std::abs(sandy_end_time- sandy_start_time);
       }
+
 
       const video_coding::PacketBuffer::Packet& last_packet = *packet;
       OnAssembledFrame(std::make_unique<video_coding::RtpFrameObject>(
@@ -897,45 +911,180 @@ void RtpVideoStreamReceiver2::OnInsertedPacket(
           RtpPacketInfos(std::move(packet_infos)),  //
           std::move(bitstream)));
       //sandy: Frame is constructed now measure the rate of increase and decrease for RTP frame construction.
-      double trend = prev_trend_;
-      double gap=std::abs(double(sandy_end_time- sandy_start_time));
-      ++num_of_deltas_;
-      num_of_deltas_ = std::min(num_of_deltas_, 1000);
-      // mp_accumulated_timings_ +=gap;
-      mp_smoothed_timings_=0.9 * mp_smoothed_timings_ +
-                    0.1 * gap;
-      frame_timings_.emplace_back(double(arrival_time-mp_first_arrival_time_ms_),mp_smoothed_timings_);
-      if (frame_timings_.size() > 100){
-        frame_timings_.pop_front();
-      }
-      double modified_trend =
-        std::min(num_of_deltas_, 60) * trend * 4.0;
-      if (frame_timings_.size() == 100) {
-
-        trend = LinearFitSlope(frame_timings_);
-        prev_trend_=trend;
-        modified_trend = std::min(num_of_deltas_, 60) * trend * 4.0;
-        if(modified_trend>threshold_){
-        // if (trend > 0)
-          if(arrival_time- last_key_frame_time>key_frame_interval){//sandy: Allow atleast 300 ms gap to request key frame.
-            RequestKeyFrame();
-            last_key_frame_time=arrival_time;
-            RTC_LOG(INFO)<<"sandyofo the OFO increasing and requesting key frame trend= "<<trend<<" modified_trend = "<<modified_trend<<" gap ="<<gap 
-            <<" smoothened gap "<<mp_smoothed_timings_ << "threshold_ "<<threshold_;
-          }
+      // double trend = prev_trend_;
+      //sandy: Signaling is not applicable to the redundant scheduler
+      if(!(mpcollector_->MpGetScheduler().find("red")!=std::string::npos)){
+        if(sandy_previous_frame_time==0){
+          sandy_previous_frame_time=sandy_end_time;
         }
-        // else if(trend<0)
-        else if(modified_trend<-1*threshold_)
-          RTC_LOG(INFO)<<"sandyofo the OFO is decreasing trend= "<<trend<<" modified_trend = "<<modified_trend<<" gap ="<<gap 
-        <<" smoothened gap "<<mp_smoothed_timings_ << "threshold_ "<<threshold_;
-        else
-          RTC_LOG(INFO)<<"sandyofo the OFO is constant trend= "<<trend<<" modified_trend = "<<modified_trend<<" gap ="<<gap 
-        <<" smoothened gap "<<mp_smoothed_timings_  << "threshold_ "<<threshold_;
-      }
-      MpUpdateThreshold(modified_trend,  arrival_time);
-      
+        if(sandy_time_window==0){
+          sandy_time_window=now_ms;
+        }
+
+        double gap=std::abs(double(sandy_end_time- sandy_start_time));
+        double ifd=std::abs(double(sandy_end_time- sandy_previous_frame_time));
+        int nack=max_nack_count;
+        
+        if(now_ms - sandy_time_window>1000){
+          ++num_of_deltas_;
+          double gap_trend=0;
+          double ifd_trend=0;
+          float gap_avg=0;
+          float ifd_avg=0;
+          float nack_avg=0;
+          if(mp_gaps_.size()>0)
+            gap_avg=(std::accumulate(mp_gaps_.begin(),mp_gaps_.end(),0))/mp_gaps_.size();
+          if(mp_ifd_.size()>0)
+            ifd_avg=(std::accumulate(mp_ifd_.begin(),mp_ifd_.end(),0))/mp_ifd_.size();
+          if(mp_nack_.size()>0)
+            nack_avg=(std::accumulate(mp_nack_.begin(),mp_nack_.end(),0))/mp_nack_.size();
+          //sandy: you also need to think from the perpective of e2e delay. If the IFD average is going way above then
+          //we should not use the slow path
+          if(ifd_avg>1000){//sandy: This is triggered during RR scheduler
+            RTC_LOG(INFO)<<"sandyofo send the set to one signal because of e2e ifd:"<<ifd_avg;
+            // rtp_rtcp_->SendAppRequestFull();
+            frame_timings_.clear();
+            frame_ifd_.clear();
+            mp_smoothed_timings_ifd_=0;
+            mp_smoothed_timings_=0;
+            full_signal_sent_count=0;
+          }
+          if(gap_avg>1000){//sandy: This is triggered during window scheduler
+            RTC_LOG(INFO)<<"sandyofo send the set to one signal because of e2e ifd:"<<gap_avg;
+            // rtp_rtcp_->SendAppRequestFull();
+            frame_timings_.clear();
+            frame_ifd_.clear();
+            mp_smoothed_timings_ifd_=0;
+            mp_smoothed_timings_=0;
+            full_signal_sent_count=0;
+          }
+
+
+          if(frame_timings_.size()>=linearwindow){
+            gap_trend = LinearFitSlope(frame_timings_);  
+          }
+          if(frame_ifd_.size()>=linearwindow){
+            ifd_trend = LinearFitSlope(frame_ifd_);
+          }
+          if(gap_trend>0.001 && ifd_trend>0.001 &&nack_avg >0 && ifd_avg>33.0 && gap_avg>50){
+            // if(gap_trend>0.001 || ifd_trend >0.001){
+            // if(ifd_avg>33.0 && gap_avg>50){
+              //sandy: Disabling the path comes at very high cost and hence try to send the half signal first
+              if(full_signal_sent_count<1){
+                full_signal_sent_count++;
+                // rtp_rtcp_->SendAppRequestHalf();
+                RTC_LOG(INFO)<<"sandyofo send the reduction signal by half "<<full_signal_sent_count;
+              }else {
+                RTC_LOG(INFO)<<"sandyofo send the set to one signal";
+                //sandy: Since you have made siganl cleared you should restart the trend process
+                // rtp_rtcp_->SendAppRequestFull();
+                frame_timings_.clear();
+                frame_ifd_.clear();
+                mp_smoothed_timings_ifd_=0;
+                mp_smoothed_timings_=0;
+                full_signal_sent_count=0;
+              }
+          }
+          else{
+            full_signal_sent_count=0;
+          }
+          RTC_LOG(LS_INFO)<<"sandyofoavg "<<arrival_time-mp_first_arrival_time_ms_<<" gap "<<gap_avg<<" IFD "<< 
+          ifd_avg<<" gap trend "<<gap_trend<<" ifd trend "<<ifd_trend<<" gap size= "<<frame_timings_.size() 
+          <<" IFD size: "<<frame_ifd_.size()<<" Nack: "<<nack_avg;
+          
+          mp_gaps_.clear();
+          mp_ifd_.clear();        
+          mp_nack_.clear();
+          sandy_time_window=now_ms;
+          if(frame_timings_.size() > linearwindow){
+            frame_timings_.pop_front();
+          }
+          if(frame_ifd_.size()>linearwindow){
+            frame_ifd_.pop_front();
+          }
+          if(gap>0){
+            mp_smoothed_timings_=0.9 * mp_smoothed_timings_ +
+                      0.1 * gap;
+            mp_gaps_.push_back(gap);
+            frame_timings_.emplace_back(double(arrival_time-mp_first_arrival_time_ms_),mp_smoothed_timings_);
+          }
+          if(ifd>0){
+            mp_smoothed_timings_ifd_=0.9 * mp_smoothed_timings_ifd_ +
+                      0.1 * ifd;
+            mp_ifd_.push_back(ifd);
+            frame_ifd_.emplace_back(double(arrival_time-mp_first_arrival_time_ms_),mp_smoothed_timings_ifd_);
+          }
+          if(nack>0){
+            mp_nack_.push_back(nack);
+          }
+        }else{
+          if(frame_timings_.size() > linearwindow){
+            frame_timings_.pop_front();
+          }
+          if(gap>0){
+            mp_gaps_.push_back(gap);
+            mp_smoothed_timings_=0.9 * mp_smoothed_timings_ +
+                      0.1 * gap;
+            frame_timings_.emplace_back(double(arrival_time-mp_first_arrival_time_ms_),mp_smoothed_timings_);
+          }
+          if(frame_ifd_.size()>linearwindow){
+            frame_ifd_.pop_front();
+          }
+          if(ifd>0){
+            mp_smoothed_timings_ifd_=0.9 * mp_smoothed_timings_ifd_ +
+                      0.1 * ifd;
+            mp_ifd_.push_back(ifd);
+            frame_ifd_.emplace_back(double(arrival_time-mp_first_arrival_time_ms_),mp_smoothed_timings_ifd_);
+          }
+          if(nack>0){
+            mp_nack_.push_back(nack);
+          }        
+        } 
+        RTC_LOG(LS_INFO)<<"sandyofo "<<arrival_time-mp_first_arrival_time_ms_<<":"<<gap<<" IFD: "<<ifd<<
+        " Nack: "<<nack<<" RTP packets count: "<<packets_count;
+        sandy_previous_frame_time=sandy_end_time;
+        
+        // num_of_deltas_ = std::min(num_of_deltas_, 1000);
+        // mp_accumulated_timings_ +=gap;
+        // mp_smoothed_timings_=0.9 * mp_smoothed_timings_ +
+        //               0.1 * gap;
+        // frame_timings_.emplace_back(double(arrival_time-mp_first_arrival_time_ms_),mp_smoothed_timings_);
+        // if (frame_timings_.size() > 100){
+        //   frame_timings_.pop_front();
+        // }
+        // if(num_of_deltas_<5)rtp_rtcp_->SendAppRequest();//sandy: Requesting to reduce amount on the second path
+        // double modified_trend =
+        //   std::min(num_of_deltas_, 60) * trend * 4.0;
+        // if (frame_timings_.size() == 100) {
+
+          // trend = LinearFitSlope(frame_timings_);
+          // prev_trend_=trend;
+          // modified_trend = std::min(num_of_deltas_, 60) * trend * 4.0;
+          // if(modified_trend>threshold_){
+          // if (trend > 0)
+            // if(arrival_time- last_key_frame_time>key_frame_interval){//sandy: Allow atleast 300 ms gap to request key frame.
+              // RequestKeyFrame();
+              // last_key_frame_time=arrival_time;
+              // RTC_LOG(INFO)<<"sandyofo the OFO increasing and requesting key frame trend= "<<trend<<" modified_trend = "<<modified_trend<<" gap ="<<gap 
+              // <<" smoothened gap "<<mp_smoothed_timings_ << "threshold_ "<<threshold_;
+            // }
+          // }
+          // else if(trend<0)
+          // else if(modified_trend<-1*threshold_)
+          //   RTC_LOG(INFO)<<"sandyofo the OFO is decreasing trend= "<<trend<<" modified_trend = "<<modified_trend<<" gap ="<<gap 
+          // <<" smoothened gap "<<mp_smoothed_timings_ << "threshold_ "<<threshold_;
+          // else
+            // RT?C_LOG(INFO)<<"sandyofo the OFO is constant trend= "<<trend<<" modified_trend = "<<modified_trend<<" gap ="<<gap 
+          // <<" smoothened gap "<<mp_smoothed_timings_  << "threshold_ "<<threshold_;
+        // }
+        // MpUpdateThreshold(modified_trend,  arrival_time);
+        sandy_end_time=0;
+        sandy_start_time=0;
+      }        
     }
   }
+  // RTC_LOG(LS_INFO)<<"sandyofo  the packets count in frame: "<<packets_count;
+  packets_count=0;
   RTC_DCHECK(frame_boundary);
   if (result.buffer_cleared) {
     
@@ -970,7 +1119,7 @@ void RtpVideoStreamReceiver2::OnAssembledFrame(
       // requested a key frame when the first packet for the non-key frame
       // had arrived, so no need to replicate the request.
       if (!loss_notification_controller_) {
-        RTC_LOG(INFO)<<"sandyofo the OFO increasing and buffer is full ";
+        // RTC_LOG(INFO)<<"sandyofo the OFO increasing and buffer is full ";
         RequestKeyFrame();
       }
     }

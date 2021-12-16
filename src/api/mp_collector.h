@@ -76,6 +76,8 @@ public:
 	int spath_lock_=0;
 	int ppath_lock_=0;
 	int best_pathid_=0;
+	int halfsignaled_pathid_=0;
+	int fullsignaled_pathid_=0;
 	double ratio_=0;
 	int loss_pathid_=0;
 	std::string scheduler_="rr";
@@ -83,7 +85,12 @@ public:
 	int rtt2_=0;
 	double loss1_=0;
 	double loss2_=0;
-
+	double alpha_=1.0;
+	double beta_=0.0;
+	int64_t halfsignaltime=0;
+	int64_t fullsignaltime=0;
+	int halfsignaled_rtt_=0;
+	int fullsignaled_rtt_=0;
 	void MpStoreCandidate (std::string ip, int port,uint32_t priority,std::string transport_name, 
 		uint16_t network_id,uint16_t network_cost,std::string protocol) ;
 	void MpPrintCandidates() const;
@@ -105,6 +112,9 @@ public:
 	int MpGetBestPathId(){//If MP-webRTC is enabled
 		return best_pathid_;
 	}
+	// int MpGetBestPathIdRTT(){//If MP-webRTC is enabled
+	// 	return best_pathid_;
+	// }
 	void MpSetBestPathId(int pathid){ 
 		best_pathid_=pathid;
 	}
@@ -193,7 +203,201 @@ public:
 	void MpSetLoss2(double loss2){ 
 		loss2_=loss2;
 	}
+	void MpSetHalfSignal(){
+		if(rtt2_==0 || rtt1_==0)
+			return;
+		if(MpGetFullSignal())//sandy: Skip this signal if full signal is already set
+					return;
+		if(MpGetBestPathId()==1 && rtt2_<10){
+			return;
+		}
+		if(MpGetBestPathId()==2 && rtt1_<10){
+			return;
+		}
+		int64_t now=rtc::TimeMillis();
+		if(!halfsignaltime){
+			halfsignaltime=now;
+			if(MpGetBestPathId()==1){
+				if(halfsignaled_rtt_>0 && rtt2_<halfsignaled_rtt_)
+					halfsignaled_rtt_=rtt2_;		
+				else
+					halfsignaled_rtt_=rtt2_;
+				MpSetHalfSignaledPathId(2);
+				RTC_LOG(INFO)<<now<<"sandyofo reduce the traffic on path 2 by half "<<rtt2_<<" signaled RTT "<<halfsignaled_rtt_;
+			}else{
+				if(halfsignaled_rtt_>0 && rtt1_<halfsignaled_rtt_)
+					halfsignaled_rtt_=rtt1_;
+				else halfsignaled_rtt_=rtt1_;
+				MpSetHalfSignaledPathId(1);
+				RTC_LOG(INFO)<<now<<"sandyofo reduce the traffic on path 1 by half "<<rtt1_<<" signaled RTT "<<halfsignaled_rtt_;
+			}
+			alpha_/=2;
+		}
+		else if(now-halfsignaltime>100){
+			//sandy: If Half siganl is already set
+			if(alpha_<1.0){
+				if(halfsignaled_pathid_==1){
+					//sandy: Half signal is set on primary path
+					if(MpGetBestPathId()==1){
+						MpClearHalfSignal();
+						RTC_LOG(LS_INFO)<<"sandyofo previosly the p1 was signaled and now it becomes the best path: "<<MpGetBestPathId()<< 
+				"RTT1: "<<rtt1_<<"RTT2: "<<rtt2_;
+						MpSetHalfSignaledPathId(2);
+						alpha_=1/2;
+					}else
+						alpha_/=2;
+				}else if(halfsignaled_pathid_==2){
+					if(MpGetBestPathId()==2){
+						MpClearHalfSignal();
+						RTC_LOG(LS_INFO)<<"sandyofo previosly the p2 was signaled and now it becomes the best path: "<<MpGetBestPathId()<< 
+				"RTT1: "<<rtt1_<<"RTT2: "<<rtt2_;
+						MpSetHalfSignaledPathId(1);
+						alpha_=1/2;
+					}else
+						alpha_/=2;
+				}	
+			}	
+			else{
+				if(MpGetBestPathId()==1){
+					if(halfsignaled_rtt_>0 && rtt2_<halfsignaled_rtt_)
+						halfsignaled_rtt_=rtt2_;		
+					else
+						halfsignaled_rtt_=rtt2_;
+					MpSetHalfSignaledPathId(2);
+					RTC_LOG(INFO)<<now<<"sandyofo reduce the traffic on path 2 by half "<<rtt2_<<" signaled RTT "<<halfsignaled_rtt_<< 
+				"RTT1: "<<rtt1_<<"RTT2: "<<rtt2_;
+				}else{
+					if(halfsignaled_rtt_>0 && rtt1_<halfsignaled_rtt_)
+						halfsignaled_rtt_=rtt1_;
+					else halfsignaled_rtt_=rtt1_;
+					MpSetHalfSignaledPathId(1);
+					RTC_LOG(INFO)<<now<<"sandyofo reduce the traffic on path 1 by half "<<rtt1_<<" signaled RTT "<<halfsignaled_rtt_<< 
+				"RTT1: "<<rtt1_<<"RTT2: "<<rtt2_;
+				}
+				alpha_/=2;
+			}
+		}
+		halfsignaltime=now;
+	}
+	double MpGetHalfSignal(){
+		return alpha_;
+	}
+	void MpClearHalfSignal(){
+		alpha_=1.0;
+		halfsignaled_rtt_=0;
+	}
+	void MpSetFullSignal(){
+		if(rtt2_==0 || rtt1_==0)
+			return;
+		//sandy: Skip this signal if full signal is already set
+		RTC_LOG(LS_INFO)<<"sandyofo received full signal and let us see if it gets activated";
+		int64_t now=rtc::TimeMillis();
+		if(MpGetFullSignal()){
+				RTC_LOG(LS_INFO)<<"sandyofo the full signal is already enabled";
+				return;
+		}
+		MpClearHalfSignal();//sandy: Clear all the pending half signal
+		//sandy: Ignore the signal if the RTT is too small
+		if(MpGetBestPathId()==1 && rtt2_<10){
+			RTC_LOG(INFO)<<now<<"sandyofo ignoring the full signal on path 2 as RTT is small "<<rtt2_<<" signaled RTT "<<fullsignaled_rtt_;
+			return;
+		}
+		if(MpGetBestPathId()==2 && rtt1_<10){
+			RTC_LOG(INFO)<<now<<"sandyofo ignoring the full signal on path 1 as RTT is small "<<rtt1_<<" signaled RTT "<<fullsignaled_rtt_;
+			return;
+		}
 
+		if(!fullsignaltime){
+			fullsignaltime=now;
+			beta_=1.0;	
+			if(MpGetBestPathId()==1){//sandy: This could be loss enabled best path and hence please check the delay as well
+				if(rtt1_/2>(rtt2_/2)*500){//sandy: If the delay difference between two paths is too big, that path with higher delay will increse e2e
+					fullsignaled_rtt_=rtt1_;
+					MpSetFullSignaledPathId(1);
+					RTC_LOG(INFO)<<now<<"sandyofo reduce the traffic on slow path to one packet 1 by e2e signaled "<<fullsignaled_rtt_<< 
+					"RTT1: "<<rtt1_<<"RTT2: "<<rtt2_;
+				}else{
+					fullsignaled_rtt_=rtt2_;
+					MpSetFullSignaledPathId(2);
+					RTC_LOG(INFO)<<now<<"sandyofo reduce the traffic on slow path to one packet 2 "<<rtt2_<<" signaled "<<fullsignaled_rtt_<< 
+					"RTT1: "<<rtt1_<<"RTT2: "<<rtt2_;
+				}
+			}else{
+				if(rtt2_/2>500*(rtt1_/2)){
+					fullsignaled_rtt_=rtt2_;
+					MpSetFullSignaledPathId(2);
+					RTC_LOG(INFO)<<now<<"sandyofo reduce the traffic on slow path to one packet 1 by e2e signaled "<<fullsignaled_rtt_<< 
+					"RTT1: "<<rtt1_<<"RTT2: "<<rtt2_;
+				}else{
+					fullsignaled_rtt_=rtt1_;
+					MpSetFullSignaledPathId(1);
+					RTC_LOG(INFO)<<now<<"sandyofo reduce the traffic on slow path to one packet 1 "<<rtt1_<<" signaled "<<fullsignaled_rtt_<< 
+					"RTT1: "<<rtt1_<<"RTT2: "<<rtt2_;
+				}
+			}
+		}
+		else if(now- fullsignaltime>100){
+			// RTC_LOG(INFO)<<now<<"sandyofo redcuce the traffic on slow path to one packet ";
+			beta_=1.0;	
+			if(MpGetBestPathId()==1){
+				if(rtt1_/2>(rtt2_/2)*500){//sandy: If the delay difference between two paths is too big, that path with higher delay will increse e2e
+					fullsignaled_rtt_=rtt1_;
+					MpSetFullSignaledPathId(1);
+					RTC_LOG(INFO)<<now<<"sandyofo reduce the traffic on slow path to one packet 1 by e2e signaled "<<fullsignaled_rtt_<< 
+					"RTT1: "<<rtt1_<<"RTT2: "<<rtt2_;
+				}else{
+					fullsignaled_rtt_=rtt2_;
+					MpSetFullSignaledPathId(2);
+					RTC_LOG(INFO)<<now<<"sandyofo reduce the traffic on slow path to one packet 2 "<<rtt2_<<" signaled "<<fullsignaled_rtt_<< 
+					"RTT1: "<<rtt1_<<"RTT2: "<<rtt2_;
+				}
+			}else{
+				if(rtt2_/2>500*(rtt1_/2)){
+					fullsignaled_rtt_=rtt2_;
+					MpSetFullSignaledPathId(2);
+					RTC_LOG(INFO)<<now<<"sandyofo reduce the traffic on slow path to one packet 1 by e2e signaled "<<fullsignaled_rtt_<< 
+					"RTT1: "<<rtt1_<<"RTT2: "<<rtt2_;
+				}else{
+					fullsignaled_rtt_=rtt1_;
+					MpSetFullSignaledPathId(1);
+					RTC_LOG(INFO)<<now<<"sandyofo reduce the traffic on slow path to one packet 1 "<<rtt1_<<" signaled "<<fullsignaled_rtt_<< 
+					"RTT1: "<<rtt1_<<"RTT2: "<<rtt2_;
+				}
+			}
+		}
+		fullsignaltime=now;
+	}
+	void MpClearFullSignal(){
+		beta_=0.0;
+		fullsignaled_rtt_=0;
+	}
+	double MpGetFullSignal(){
+		return beta_;
+	}
+	int MpGetHalfSignaledRtt(){
+		return halfsignaled_rtt_;
+	}
+	int MpGetFullSignaledRtt(){
+		return fullsignaled_rtt_;
+	}
+	void MpSetHalfSignaledRtt(int rtt){
+		halfsignaled_rtt_=rtt;
+	}
+	void MpSetFullSignaledRtt(int rtt){
+		fullsignaled_rtt_=rtt;
+	}
+	int MpGetHalfSignaledPathId(){//If MP-webRTC is enabled
+		return halfsignaled_pathid_;
+	}
+	void MpSetHalfSignaledPathId(int pathid){ 
+		halfsignaled_pathid_=pathid;
+	} 
+	int MpGetFullSignaledPathId(){//If MP-webRTC is enabled
+		return fullsignaled_pathid_;
+	}
+	void MpSetFullSignaledPathId(int pathid){ 
+		fullsignaled_pathid_=pathid;
+	} 
 };
 
 

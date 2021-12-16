@@ -82,10 +82,11 @@ enum RTPExtensionType : int {
   kRtpExtensionNumberOfExtensions  // Must be the last entity in the enum.
 };
 
-enum RTCPAppSubTypes { kAppSubtypeBwe = 0x00 };
+enum RTCPAppSubTypes { kAppSubtypeBwe = 0x00};
 
 // TODO(sprang): Make this an enum class once rtcp_receiver has been cleaned up.
 enum RTCPPacketType : uint32_t {
+  kAppSubtypeMpHalf = 0x0000,//sandy: Add a new app sub type.
   kRtcpReport = 0x0001,
   kRtcpSr = 0x0002,
   kRtcpRr = 0x0004,
@@ -103,7 +104,8 @@ enum RTCPPacketType : uint32_t {
   kRtcpXrReceiverReferenceTime = 0x40000,
   kRtcpXrDlrrReportBlock = 0x80000,
   kRtcpTransportFeedback = 0x100000,
-  kRtcpXrTargetBitrate = 0x200000
+  kRtcpXrTargetBitrate = 0x200000,
+  kAppSubtypeMpFull = 0x1000000
 };
 
 enum RtxMode {
