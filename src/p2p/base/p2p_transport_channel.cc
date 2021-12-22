@@ -42,6 +42,7 @@ int64_t mpprint_time=0;
 int64_t second_connection_broke_time=0;
 int64_t second_ping_sent=0;
 int64_t primary_ping_sent=0;
+int64_t mpprint_count=0;
 // int sandy_connection_wait=50; 
 
 // std::vector<cricket::Connection *> mp_second_connections;//connection that cannot talk to each other
@@ -1540,7 +1541,7 @@ int P2PTransportChannel::SendPacket(const char* data,
   if(mpreference_time==0)
     mpreference_time=now;
   if(mpprint_time==0)
-    mpreference_time=now;
+    mpprint_time=now;
   RTC_DCHECK_RUN_ON(network_thread_);
   if(options.packet_id<0){
     RTC_DCHECK(options.packet_id);
@@ -1646,7 +1647,8 @@ int P2PTransportChannel::SendPacket(const char* data,
 
   //sandy: Get the stats
   if(now- mpprint_time>1000 && mpcollector_->MpISsecondPathOpen()){
-    RTC_LOG(INFO)<<"MpWebRTCStats "<<(selected_connection_->stats().sent_bytes_second*8)/1000<<" "<<(second_connection_->stats().sent_bytes_second*8)/1000<<" "<< 
+    mpprint_count++;
+    RTC_LOG(INFO)<<mpprint_count<<" MpWebRTCStats "<<(selected_connection_->stats().sent_bytes_second*8)/1000<<" "<<(second_connection_->stats().sent_bytes_second*8)/1000<<" "<< 
     mpcollector_->MpGetRTT1()<<" "<<mpcollector_->MpGetRTT2()<<" "<<mpcollector_->MpGetLoss1()<<" "<<mpcollector_->MpGetLoss2();
     mpprint_time=now;
   }
@@ -1657,12 +1659,12 @@ int P2PTransportChannel::SendPacket(const char* data,
     if(!second_ping_sent){
       second_ping_sent=now;
       PingConnection(second_connection_);
-    }else if(now-second_ping_sent>1000){
+    }else if(now-second_ping_sent>500){
       PingConnection(second_connection_);
       second_ping_sent=now;
-      RTC_LOG(INFO)<<"sandyofo ping RTT: "<<rtt<<" signaled RTT "<<mpcollector_->MpGetFullSignaledRtt();
+      // RTC_LOG(INFO)<<"sandyofo ping RTT: "<<rtt<<" signaled RTT "<<mpcollector_->MpGetFullSignaledRtt();
     }
-    if(second_ping_sent && now-second_ping_sent>500){//sandy: Atleast wait for 60 seconds
+    if(second_ping_sent && now-second_ping_sent>250){//sandy: Atleast wait for 60 seconds
       int oldrtt=mpcollector_->MpGetFullSignaledRtt()/2;//sandy: If it is /2 then path will never get enabled
       if(oldrtt<=0)
         oldrtt=1;
@@ -1682,12 +1684,12 @@ int P2PTransportChannel::SendPacket(const char* data,
     if(!primary_ping_sent){
       primary_ping_sent=now;
       PingConnection(selected_connection_);
-    }else if(now-primary_ping_sent>1000){
+    }else if(now-primary_ping_sent>500){
       PingConnection(selected_connection_);
       primary_ping_sent=now;
-      RTC_LOG(INFO)<<"sandyofo ping RTT: "<<rtt<<" signaled RTT "<<mpcollector_->MpGetFullSignaledRtt();
+      // RTC_LOG(INFO)<<"sandyofo ping RTT: "<<rtt<<" signaled RTT "<<mpcollector_->MpGetFullSignaledRtt();
     }
-    if(primary_ping_sent && now-primary_ping_sent>500){//sandy: Atleast wait for 60 seconds
+    if(primary_ping_sent && now-primary_ping_sent>250){//sandy: Atleast wait for 60 seconds
       int oldrtt=mpcollector_->MpGetFullSignaledRtt()/2;//sandy: If it is /2 then path will never get enabled
       if(oldrtt<=0)
         oldrtt=1;

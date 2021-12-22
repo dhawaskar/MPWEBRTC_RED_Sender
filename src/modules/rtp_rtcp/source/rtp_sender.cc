@@ -719,7 +719,7 @@ void RTPSender::MPTrafficSplitImplementation(
         }
       }else if(mpcollector_->MpGetFullSignal() && mpcollector_->MpGetFullSignaledPathId()==1 && 
       mpcollector_->MpISsecondPathOpen()){//sandy:Check for the full signal in primary path
-        RTC_LOG(INFO)<<"sandyofo: all packets via P1 "<<packets.size();
+        // RTC_LOG(INFO)<<"sandyofo: all packets via P2 "<<packets.size();
         //sandy: Send all the packets via second path
         for (auto& packet : packets){
           packet->subflow_id=2;
@@ -729,7 +729,7 @@ void RTPSender::MPTrafficSplitImplementation(
         }
       }else if(mpcollector_->MpGetFullSignal() && mpcollector_->MpGetFullSignaledPathId()==2 && //sandy:Check for the full signal in second path
       mpcollector_->MpISsecondPathOpen()){
-        RTC_LOG(INFO)<<"sandyofo: all packets via P2 "<<packets.size();
+        // RTC_LOG(INFO)<<"sandyofo: all packets via P1 "<<packets.size();
         //sandy: Send all the packets via primary path
         for (auto& packet : packets){
           packet->subflow_id=1;
@@ -747,6 +747,12 @@ void RTPSender::MPTrafficSplitImplementation(
         }
         int p1=split;//Sandy:Best path share
         int p2=(packets.size()-split);//sandy:Worst path share
+        //sandy: Please make sure best path has highest packets.
+        if(p1<p2){
+          int temp=p1;
+          p1=p2;
+          p2=temp;
+        }
         double alpha=1.0;
         if((packets.size()>2&& p2==0) || mpcollector_->MpGetLossBasedPathId()){
           p1=packets.size()-1;

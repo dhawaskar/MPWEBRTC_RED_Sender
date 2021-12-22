@@ -748,8 +748,9 @@ void RtpTransportControllerSend::StartProcessPeriodicTasks() {
           if(mpcollector_->MpISsecondPathOpen() &&!( mpcollector_->MpGetScheduler().find("red")!=std::string::npos)){
           //sandy: Change #1 double the Queue size
             control_handler_->SetPacerQueue(expected_queue_time/4);
-          }else
+          }else{
             control_handler_->SetPacerQueue(expected_queue_time);
+          }
           // control_handler_s_->SetPacerQueue(expected_queue_time);
           UpdateControlState();
           return kPacerQueueUpdateInterval;
@@ -826,7 +827,7 @@ int RtpTransportControllerSend::MpFindBestPath(int64_t rtt1,int64_t rtt2,double 
     bestpath=2;
 
   // if(rtt1<100 && rtt2 <100){
-  if(loss1>=0.1 && loss2>=0.1){
+  if(loss1>=0.5 && loss2>=0.5){
     if(loss1>loss2){
       bestpath=2;
       mpcollector_->MpSetLossBasedPathId(bestpath);
@@ -835,10 +836,10 @@ int RtpTransportControllerSend::MpFindBestPath(int64_t rtt1,int64_t rtt2,double 
       bestpath=1;
       mpcollector_->MpSetLossBasedPathId(bestpath);
     }
-  }else if(loss1>=0.1 && loss1>loss2){
+  }else if(loss1>=0.5 && loss1>loss2){
     bestpath=2;
     mpcollector_->MpSetLossBasedPathId(bestpath);
-  }else if(loss2>=0.1 && loss2>loss1){
+  }else if(loss2>=0.5 && loss2>loss1){
     bestpath=1;
     mpcollector_->MpSetLossBasedPathId(bestpath);
   }
@@ -848,12 +849,26 @@ int RtpTransportControllerSend::MpFindBestPath(int64_t rtt1,int64_t rtt2,double 
   //sandy: Check if there is Halfsignaled RTT set and if check if RTT has reduced and if then clear the half signal
   if(rtt1>0 && mpcollector_->MpGetHalfSignal()<1.0 && mpcollector_->MpGetHalfSignaledPathId()==1 && 
     (rtt1<=mpcollector_->MpGetHalfSignaledRtt()/4)){//&&  rtt1<100 
-    RTC_LOG(LS_INFO)<<"sandyofo clearing the half signal set on path 1 old RTT:"<<mpcollector_->MpGetHalfSignaledRtt()<<" new RTT: "<<rtt1;
-    mpcollector_->MpClearHalfSignal();
+    if(mpcollector_->MpGetHalfSignalLoss()!=0 && mpcollector_->MpGetLoss1()<mpcollector_->MpGetHalfSignalLoss()){//sandy: If the loss is also set
+      RTC_LOG(LS_INFO)<<"sandyofo clearing the half signal set on path 1 old RTT:"<<mpcollector_->MpGetHalfSignaledRtt() 
+      <<" new RTT: "<<rtt1<<" old loss: "<<mpcollector_->MpGetHalfSignalLoss()<<" new loss "<<mpcollector_->MpGetLoss1();
+      mpcollector_->MpClearHalfSignal();
+    }else{
+      RTC_LOG(LS_INFO)<<"sandyofo clearing the half signal set on path 1 old RTT:" 
+      <<mpcollector_->MpGetHalfSignaledRtt()<<" new RTT: "<<rtt1;
+      mpcollector_->MpClearHalfSignal();
+    }
   }else if(rtt2>0 && mpcollector_->MpGetHalfSignal()<1.0 && mpcollector_->MpGetHalfSignaledPathId()==2 && 
     (rtt2<=mpcollector_->MpGetHalfSignaledRtt()/4)){ //&&   rtt2<100 
-    RTC_LOG(LS_INFO)<<"sandyofo clearing the half signal set on path 2 old RTT:"<<mpcollector_->MpGetHalfSignaledRtt()<<" new RTT: "<<rtt2;
-    mpcollector_->MpClearHalfSignal();
+    if(mpcollector_->MpGetHalfSignalLoss()!=0 && mpcollector_->MpGetLoss2()<mpcollector_->MpGetHalfSignalLoss()){//sandy: If the loss is also set
+      RTC_LOG(LS_INFO)<<"sandyofo clearing the half signal set on path 2 old RTT:"<<mpcollector_->MpGetHalfSignaledRtt() 
+      <<" new RTT: "<<rtt2<<" old loss: "<<mpcollector_->MpGetHalfSignalLoss()<<" new loss "<<mpcollector_->MpGetLoss2();
+      mpcollector_->MpClearHalfSignal();
+    }else{
+      RTC_LOG(LS_INFO)<<"sandyofo clearing the half signal set on path 2 old RTT:"
+      <<mpcollector_->MpGetHalfSignaledRtt()<<" new RTT: "<<rtt2;
+      mpcollector_->MpClearHalfSignal();
+    }
   }
   return bestpath;
 }

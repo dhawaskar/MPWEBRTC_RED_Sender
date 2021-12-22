@@ -61,8 +61,10 @@ int64_t sandy_start_time=0;
 int64_t sandy_end_time=0;
 int64_t sandy_previous_frame_time=0;
 int64_t sandy_time_window=0;
-int64_t full_signal_sent_count=0;
+int64_t sandy_time_window_trigger=0;
+int64_t full_signal_sent_time=0;
 int64_t packets_count=0;
+int mp_print_count=0;
 namespace webrtc {
 
 namespace {
@@ -913,7 +915,7 @@ void RtpVideoStreamReceiver2::OnInsertedPacket(
       //sandy: Frame is constructed now measure the rate of increase and decrease for RTP frame construction.
       // double trend = prev_trend_;
       //sandy: Signaling is not applicable to the redundant scheduler
-      if(!(mpcollector_->MpGetScheduler().find("red")!=std::string::npos)){
+      if(!(mpcollector_->MpGetScheduler().find("red")!=std::string::npos) && mpcollector_->MpISsecondPathOpen()){
         if(sandy_previous_frame_time==0){
           sandy_previous_frame_time=sandy_end_time;
         }
@@ -924,7 +926,19 @@ void RtpVideoStreamReceiver2::OnInsertedPacket(
         double gap=std::abs(double(sandy_end_time- sandy_start_time));
         double ifd=std::abs(double(sandy_end_time- sandy_previous_frame_time));
         int nack=max_nack_count;
-        
+        if(!sandy_time_window_trigger){
+          sandy_time_window_trigger=now_ms;
+        }
+        if(now_ms - sandy_time_window_trigger >60000){//sandy: Every minute please clean all the filters
+          RTC_LOG(INFO)<<"sandyofo send the reduction signaling window cleaning";
+          frame_timings_.clear();
+          frame_ifd_.clear();
+          mp_smoothed_timings_ifd_=0;
+          mp_smoothed_timings_=0;
+          full_signal_sent_time=0;
+          sandy_time_window_trigger=now_ms;
+        }
+
         if(now_ms - sandy_time_window>1000){
           ++num_of_deltas_;
           double gap_trend=0;
@@ -938,59 +952,59 @@ void RtpVideoStreamReceiver2::OnInsertedPacket(
             ifd_avg=(std::accumulate(mp_ifd_.begin(),mp_ifd_.end(),0))/mp_ifd_.size();
           if(mp_nack_.size()>0)
             nack_avg=(std::accumulate(mp_nack_.begin(),mp_nack_.end(),0))/mp_nack_.size();
-          //sandy: you also need to think from the perpective of e2e delay. If the IFD average is going way above then
-          //we should not use the slow path
-          if(ifd_avg>1000){//sandy: This is triggered during RR scheduler
-            RTC_LOG(INFO)<<"sandyofo send the set to one signal because of e2e ifd:"<<ifd_avg;
-            // rtp_rtcp_->SendAppRequestFull();
-            frame_timings_.clear();
-            frame_ifd_.clear();
-            mp_smoothed_timings_ifd_=0;
-            mp_smoothed_timings_=0;
-            full_signal_sent_count=0;
-          }
-          if(gap_avg>1000){//sandy: This is triggered during window scheduler
-            RTC_LOG(INFO)<<"sandyofo send the set to one signal because of e2e ifd:"<<gap_avg;
-            // rtp_rtcp_->SendAppRequestFull();
-            frame_timings_.clear();
-            frame_ifd_.clear();
-            mp_smoothed_timings_ifd_=0;
-            mp_smoothed_timings_=0;
-            full_signal_sent_count=0;
-          }
-
-
           if(frame_timings_.size()>=linearwindow){
             gap_trend = LinearFitSlope(frame_timings_);  
           }
           if(frame_ifd_.size()>=linearwindow){
             ifd_trend = LinearFitSlope(frame_ifd_);
           }
-          if(gap_trend>0.001 && ifd_trend>0.001 &&nack_avg >0 && ifd_avg>33.0 && gap_avg>50){
-            // if(gap_trend>0.001 || ifd_trend >0.001){
-            // if(ifd_avg>33.0 && gap_avg>50){
-              //sandy: Disabling the path comes at very high cost and hence try to send the half signal first
-              if(full_signal_sent_count<1){
-                full_signal_sent_count++;
-                // rtp_rtcp_->SendAppRequestHalf();
-                RTC_LOG(INFO)<<"sandyofo send the reduction signal by half "<<full_signal_sent_count;
-              }else {
-                RTC_LOG(INFO)<<"sandyofo send the set to one signal";
-                //sandy: Since you have made siganl cleared you should restart the trend process
-                // rtp_rtcp_->SendAppRequestFull();
-                frame_timings_.clear();
-                frame_ifd_.clear();
-                mp_smoothed_timings_ifd_=0;
-                mp_smoothed_timings_=0;
-                full_signal_sent_count=0;
-              }
+          if(ifd_avg<100 ||  gap_avg<100){
+            //sandy: Loss based analysis
+            if(gap_trend>0.001 && ifd_trend>0.001 && (ifd_avg>33.0 || gap_avg>50)){
+              // if(gap_trend>0.001 || ifd_trend >0.001){
+              // if(ifd_avg>33.0 && gap_avg>50){
+                //sandy: Disabling the path comes at very high cost and hence try to send the half signal first
+                if(!full_signal_sent_time){
+                  full_signal_sent_time=clock_->TimeInMilliseconds();
+                  // rtp_rtcp_->SendAppRequestHalf();
+                  RTC_LOG(INFO)<<"sandyofo send the reduction signal by half "<<full_signal_sent_time;
+                }else if(now_ms- full_signal_sent_time>1500){
+                  RTC_LOG(INFO)<<"sandyofo send the set to one signal";
+                  //sandy: Since you have made siganl cleared you should restart the trend process
+                  // rtp_rtcp_->SendAppRequestFull();
+                  frame_timings_.clear();
+                  frame_ifd_.clear();
+                  mp_smoothed_timings_ifd_=0;
+                  mp_smoothed_timings_=0;
+                  full_signal_sent_time=0;
+                }
+            }
+          }else {
+            //sandy: Delay based analysis
+            if(gap_trend>0.001 && ifd_trend>0.001 && (ifd_avg>500 || gap_avg>500)){
+              // if(gap_trend>0.001 || ifd_trend >0.001){
+              // if(ifd_avg>33.0 && gap_avg>50){
+                //sandy: Disabling the path comes at very high cost and hence try to send the half signal first
+                if(!full_signal_sent_time){
+                  full_signal_sent_time=clock_->TimeInMilliseconds();
+                  // rtp_rtcp_->SendAppRequestHalf();
+                  RTC_LOG(INFO)<<"sandyofo send the reduction signal by half "<<full_signal_sent_time;
+                }else if(now_ms- full_signal_sent_time>1500){
+                  RTC_LOG(INFO)<<"sandyofo send the set to one signal";
+                  //sandy: Since you have made siganl cleared you should restart the trend process
+                  // rtp_rtcp_->SendAppRequestFull();
+                  frame_timings_.clear();
+                  frame_ifd_.clear();
+                  mp_smoothed_timings_ifd_=0;
+                  mp_smoothed_timings_=0;
+                  full_signal_sent_time=0;
+                }
+            }
           }
-          else{
-            full_signal_sent_count=0;
-          }
+
           RTC_LOG(LS_INFO)<<"sandyofoavg "<<arrival_time-mp_first_arrival_time_ms_<<" gap "<<gap_avg<<" IFD "<< 
           ifd_avg<<" gap trend "<<gap_trend<<" ifd trend "<<ifd_trend<<" gap size= "<<frame_timings_.size() 
-          <<" IFD size: "<<frame_ifd_.size()<<" Nack: "<<nack_avg;
+          <<" IFD size: "<<frame_ifd_.size()<<" Nack Avg: "<<nack_avg<<"Nack size:"<<mp_nack_.size()<< " RTT: "<<std::min(mpcollector_->MpGetRTT1(),mpcollector_->MpGetRTT2());
           
           mp_gaps_.clear();
           mp_ifd_.clear();        
@@ -1044,40 +1058,6 @@ void RtpVideoStreamReceiver2::OnInsertedPacket(
         " Nack: "<<nack<<" RTP packets count: "<<packets_count;
         sandy_previous_frame_time=sandy_end_time;
         
-        // num_of_deltas_ = std::min(num_of_deltas_, 1000);
-        // mp_accumulated_timings_ +=gap;
-        // mp_smoothed_timings_=0.9 * mp_smoothed_timings_ +
-        //               0.1 * gap;
-        // frame_timings_.emplace_back(double(arrival_time-mp_first_arrival_time_ms_),mp_smoothed_timings_);
-        // if (frame_timings_.size() > 100){
-        //   frame_timings_.pop_front();
-        // }
-        // if(num_of_deltas_<5)rtp_rtcp_->SendAppRequest();//sandy: Requesting to reduce amount on the second path
-        // double modified_trend =
-        //   std::min(num_of_deltas_, 60) * trend * 4.0;
-        // if (frame_timings_.size() == 100) {
-
-          // trend = LinearFitSlope(frame_timings_);
-          // prev_trend_=trend;
-          // modified_trend = std::min(num_of_deltas_, 60) * trend * 4.0;
-          // if(modified_trend>threshold_){
-          // if (trend > 0)
-            // if(arrival_time- last_key_frame_time>key_frame_interval){//sandy: Allow atleast 300 ms gap to request key frame.
-              // RequestKeyFrame();
-              // last_key_frame_time=arrival_time;
-              // RTC_LOG(INFO)<<"sandyofo the OFO increasing and requesting key frame trend= "<<trend<<" modified_trend = "<<modified_trend<<" gap ="<<gap 
-              // <<" smoothened gap "<<mp_smoothed_timings_ << "threshold_ "<<threshold_;
-            // }
-          // }
-          // else if(trend<0)
-          // else if(modified_trend<-1*threshold_)
-          //   RTC_LOG(INFO)<<"sandyofo the OFO is decreasing trend= "<<trend<<" modified_trend = "<<modified_trend<<" gap ="<<gap 
-          // <<" smoothened gap "<<mp_smoothed_timings_ << "threshold_ "<<threshold_;
-          // else
-            // RT?C_LOG(INFO)<<"sandyofo the OFO is constant trend= "<<trend<<" modified_trend = "<<modified_trend<<" gap ="<<gap 
-          // <<" smoothened gap "<<mp_smoothed_timings_  << "threshold_ "<<threshold_;
-        // }
-        // MpUpdateThreshold(modified_trend,  arrival_time);
         sandy_end_time=0;
         sandy_start_time=0;
       }        

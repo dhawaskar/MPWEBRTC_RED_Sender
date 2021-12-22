@@ -26,6 +26,10 @@
 #include "system_wrappers/include/metrics.h"
 #include "video/video_receive_stream2.h"
 
+std::vector<int64_t> mp_e2e_;
+int64_t e2e_time=0;
+int mp_count=0;
+
 namespace webrtc {
 namespace internal {
 namespace {
@@ -905,7 +909,7 @@ void ReceiveStatisticsProxy::OnRenderedFrame(
     const VideoFrameMetaData& frame_meta) {
   RTC_DCHECK_RUN_ON(&main_thread_);
   // Called from VideoReceiveStream2::OnFrame.
-
+  int64_t now_ms = clock_->TimeInMilliseconds();
   RTC_DCHECK_GT(frame_meta.width, 0);
   RTC_DCHECK_GT(frame_meta.height, 0);
 
@@ -937,7 +941,25 @@ void ReceiveStatisticsProxy::OnRenderedFrame(
         clock_->CurrentNtpInMilliseconds() - frame_meta.ntp_time_ms;
     if (delay_ms >= 0) {
       content_specific_stats->e2e_delay_counter.Add(delay_ms);
+     
+      //sandy: My stats on rendering frame
+      if(!e2e_time){
+        e2e_time=now_ms;
+      }
+      if(now_ms- e2e_time>1000){
+        mp_count++;
+        int64_t e2e_avg=0;
+        if(mp_e2e_.size()>0)
+          e2e_avg=(std::accumulate(mp_e2e_.begin(),mp_e2e_.end(),0))/mp_e2e_.size();
+        RTC_LOG(INFO)<<mp_count<<" sandyofo the e2e delay: "<<e2e_avg<<" FPS: "<<mp_e2e_.size();
+        e2e_time=now_ms;
+        mp_e2e_.clear();
+        mp_e2e_.push_back(delay_ms);
+      }else{
+        mp_e2e_.push_back(delay_ms);
+      }
     }
+
   }
 
   QualitySample(frame_meta.decode_timestamp);

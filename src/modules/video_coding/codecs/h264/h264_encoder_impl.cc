@@ -41,8 +41,8 @@ namespace {
 const bool kOpenH264EncoderDetailedLogging = false;
 
 // QP scaling thresholds.
-static const int kLowH264QpThreshold = 24;
-static const int kHighH264QpThreshold = 37;
+static const int kLowH264QpThreshold = 28;//24
+static const int kHighH264QpThreshold = 28;//37
 
 // Used by histograms. Values of entries should not be changed.
 enum H264EncoderImplEvent {
