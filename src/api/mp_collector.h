@@ -64,8 +64,8 @@ public:
 
 	std::deque<SandyCandidate> sandycandidates;	
 	std::deque<SandyConnection> sandyconnections;
-	long primary_congestion_wnd_= 1200;
-	long secondary_congestion_wnd_= 1200;
+	long primary_congestion_wnd_= 0;
+	long secondary_congestion_wnd_= 0;
 	uint32_t fps_=0;
 	int MPWebRTC_enabled=0;
 	int MPSecond_path=0;   //Check if the second path is set
@@ -205,7 +205,7 @@ public:
 		loss2_=loss2;
 	}
 	void MpSetHalfSignal(){
-		if(rtt2_==0 || rtt1_==0){
+		if(rtt2_<=10 || rtt1_<=10){
 			RTC_LOG(INFO)<<"sandyofo half signal are ignored as RTT are not setyet";
 			return;
 		}
@@ -294,8 +294,9 @@ public:
 		halfsignaled_rtt_=0;
 		halfsignaled_loss_=0;
 	}
+	
 	void MpSetFullSignal(){
-		if(rtt2_==0 || rtt1_==0)
+		if(rtt2_<=10 || rtt1_<=10)
 			return;
 		//sandy: Skip this signal if full signal is already set
 		RTC_LOG(LS_INFO)<<"sandyofo received full signal and let us see if it gets activated";

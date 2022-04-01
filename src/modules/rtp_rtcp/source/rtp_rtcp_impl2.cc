@@ -257,12 +257,17 @@ void ModuleRtpRtcpImpl2::Process() {
     // RTC_LOG(INFO)<<"sandyrtt sending primary path RTCP report: ";
     //rtcp_sender_.SendRTCP(GetFeedbackState(), kRtcpReport,0,0,1);//sandy: Add secondary path as well here
     rtcp_sender_.SendRTCP(GetFeedbackStatePrimary(),kRtcpReport,0,0,1);
-    
+    // rtcp_sender_.SendRTCP(GetFeedbackStateSecondary(), kRtcpReport,0,0,2);
+    RTC_LOG(INFO)<<"sandyrtcperror send primary path report";
   }
+
   if(rtcp_sender_.TimeToSendRTCPReport(false,2)&& mpcollector_->MpISsecondPathOpen() 
   && !( mpcollector_->MpGetScheduler().find("red")!=std::string::npos)){//sandy: Check if second path open
     rtcp_sender_.SendRTCP(GetFeedbackStateSecondary(), kRtcpReport,0,0,2);
+  // rtcp_sender_.SendRTCP(GetFeedbackStatePrimary(),kRtcpReport,0,0,1);
+    RTC_LOG(INFO)<<"sandyrtcperror send secondary path report";
   }
+
   //MpWebRTC: Sending the primary and secondary feed back sandesh
 
 
@@ -522,12 +527,15 @@ bool ModuleRtpRtcpImpl2::OnSendingRtpFrame(uint32_t timestamp,
     //RTC_LOG(INFO)<<"sandyrtt sending RTCP report: "<<kRtcpReport<<"\n";
     // RTC_LOG(INFO)<<"sandy just requesting to send the sender report\n";
     rtcp_sender_.SendRTCP(GetFeedbackStatePrimary(), kRtcpReport,0,0,1);
+    // rtcp_sender_.SendRTCP(GetFeedbackStateSecondary(), kRtcpReport,0,0,2);
   }
   if (mpcollector_->MpISsecondPathOpen()&& rtcp_sender_.TimeToSendRTCPReport(force_sender_report,2)){//sandy: send it for each path
     //RTC_LOG(INFO)<<"sandyrtt sending RTCP report: "<<kRtcpReport<<"\n";
     // RTC_LOG(INFO)<<"sandy just requesting to send the sender report\n";
-    if(!( mpcollector_->MpGetScheduler().find("red")!=std::string::npos))
+    if(!( mpcollector_->MpGetScheduler().find("red")!=std::string::npos)){
       rtcp_sender_.SendRTCP(GetFeedbackStateSecondary(), kRtcpReport,0,0,2);
+      // rtcp_sender_.SendRTCP(GetFeedbackStatePrimary(), kRtcpReport,0,0,1);
+    }
   }
 
   return true;

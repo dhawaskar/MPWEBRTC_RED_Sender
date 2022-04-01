@@ -75,11 +75,13 @@ class CapturerTrackSource : public webrtc::VideoTrackSource {
   static rtc::scoped_refptr<CapturerTrackSource> Create() {
     // const size_t kWidth = 4096;//1920
     // const size_t kHeight = 2160;//1080
-    // const size_t kWidth = 960;//1920
-    // const size_t kHeight = 540;//1080
-    const size_t kWidth = 1920;//2048;//1920
-    const size_t kHeight = 1080;//;//1080
-    const size_t kFps = 60;
+    const size_t kWidth = 640;//1920
+    const size_t kHeight = 480;//1080
+    // const size_t kWidth = 3840;//2048;//1920
+    // const size_t kHeight = 2160;//;//1080
+    // const size_t kWidth = 2048;//2048;//1920
+    //  const size_t kHeight = 1080;//;//1080
+    const size_t kFps = 30;
     std::unique_ptr<webrtc::test::VcmCapturer> capturer;
     std::unique_ptr<webrtc::VideoCaptureModule::DeviceInfo> info(
         webrtc::VideoCaptureFactory::CreateDeviceInfo());
@@ -89,6 +91,12 @@ class CapturerTrackSource : public webrtc::VideoTrackSource {
     num_devices = info->NumberOfDevices();
     
     for (int i = 0; i < num_devices; ++i) {
+      RTC_LOG(INFO)<<"sandycamera device number "<<i;
+    }
+    for (int i = 0; i < num_devices; ++i) {
+      // sandy: Below code is to block specific device.
+      if(i==0)
+        continue;
       if(Mpdevice>0 && Mpdevice-1==i && num_devices>1){
         RTC_LOG(INFO)<<"sandycamera the number of devices "<<num_devices<<" skipping "<<i;
         continue;
@@ -195,12 +203,12 @@ bool Conductor::CreatePeerConnection(bool dtls) {
   config.enable_dtls_srtp = dtls;
   webrtc::PeerConnectionInterface::IceServer server,server1;
   //sandy: Set your relay or turn server here please
-  // server.uri = GetPeerConnectionString();
-  std::vector<std::string> url_string,url_string1;
-  url_string.push_back("turn:128.138.224.220:3478?transport=udp");
-  server.urls=url_string;
-  server.username="sandy";
-  server.password="sandy";
+  server.uri = GetPeerConnectionString();
+  // std::vector<std::string> url_string,url_string1;
+  // url_string.push_back("turn:128.138.224.207:3478?transport=udp");
+  // server.urls=url_string;
+  // server.username="sandy";
+  // server.password="sandy";
   config.servers.push_back(server);
   //sandy: Relay 2
   // url_string1.push_back("turn:128.105.144.233:3478?transport=udp");
@@ -528,10 +536,12 @@ void Conductor::AddTracks() {
                         << result_or_error.error().message();
     }
     main_wnd_->SwitchToStreamingUI();
+
+
   } else {
     RTC_LOG(LS_ERROR) << "OpenVideoCaptureDevice failed";
   }
-  //Sandycamera: Add onother yet same video track
+  // Sandycamera: Add onother yet same video track. You only need to enable this.
   // if(num_devices>1){
   //   RTC_LOG(INFO)<<"sandycamera adding the second stream";
   //   rtc::scoped_refptr<CapturerTrackSource> video_device1 =
@@ -539,7 +549,7 @@ void Conductor::AddTracks() {
   //   rtc::scoped_refptr<webrtc::VideoTrackInterface> video_track_1(
   //     peer_connection_factory_->CreateVideoTrack("MpWebRTCTrack", video_device1));
   //   if(mp_main_wnd_)mp_main_wnd_->StartLocalRenderer(video_track_1);
-  //     result_or_error = peer_connection_->AddTrack(video_track_1, {"MpWebRTCStream"});
+  //     auto result_or_error = peer_connection_->AddTrack(video_track_1, {"MpWebRTCStream"});
   //     if (!result_or_error.ok()) {
   //       RTC_LOG(LS_ERROR) << "Failed to add video track to PeerConnection: "
   //                         << result_or_error.error().message();
@@ -548,6 +558,7 @@ void Conductor::AddTracks() {
   // }else {
   //   RTC_LOG(LS_ERROR) << "OpenVideoCaptureDevice for second camera failed";
   // }  
+  
   if(mp_main_wnd_)mp_main_wnd_->SwitchToStreamingUI();
 }
 
@@ -676,4 +687,5 @@ void Conductor::OnFailure(webrtc::RTCError error) {
 void Conductor::SendMessage(const std::string& json_object) {
   std::string* msg = new std::string(json_object);
   main_wnd_->QueueUIThreadCallback(SEND_MESSAGE_TO_PEER, msg);
+  // if(mp_main_wnd_)mp_main_wnd_->QueueUIThreadCallback(SEND_MESSAGE_TO_PEER, msg);//sandy
 }

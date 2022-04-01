@@ -25,7 +25,8 @@
 namespace webrtc {
 
 // Impossible to request feedback older than what can be represented by 15 bits.
-const int RemoteEstimatorProxy::kMaxNumberOfPackets = (1 << 15);
+// const int RemoteEstimatorProxy::kMaxNumberOfPackets = (1 << 15);
+const int RemoteEstimatorProxy::kMaxNumberOfPackets = (1 << 15);//sandy: I added it
 
 // The maximum allowed value for a timestamp in milliseconds. This is lower
 // than the numerical limit since we often convert to microseconds.
@@ -441,7 +442,7 @@ int64_t RemoteEstimatorProxy::BuildFeedbackPacket(
             static_cast<uint16_t>(it->first & 0xFFFF), it->second * 1000)) {
       // If we can't even add the first seq to the feedback packet, we won't be
       // able to build it at all.
-      RTC_CHECK(begin_iterator != it);
+      RTC_CHECK(begin_iterator != it);//sandy: This should not be commented out but I have done it for higher bitrate anyway
 
       // Could not add timestamp, feedback packet might be full. Return and
       // try again with a fresh packet.

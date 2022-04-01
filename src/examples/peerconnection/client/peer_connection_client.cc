@@ -149,8 +149,8 @@ bool PeerConnectionClient::SendToPeer(int peer_id, const std::string& message) {
   if (state_ != CONNECTED)
     return false;
 
-  RTC_DCHECK(is_connected());
-  RTC_DCHECK(control_socket_->GetState() == rtc::Socket::CS_CLOSED);
+  //RTC_DCHECK(is_connected());
+  //RTC_DCHECK(control_socket_->GetState() == rtc::Socket::CS_CLOSED);
   if (!is_connected() || peer_id == -1)
     return false;
 
@@ -216,7 +216,7 @@ void PeerConnectionClient::Close() {
 }
 
 bool PeerConnectionClient::ConnectControlSocket() {
-  RTC_DCHECK(control_socket_->GetState() == rtc::Socket::CS_CLOSED);
+  //RTC_DCHECK(control_socket_->GetState() == rtc::Socket::CS_CLOSED);
   int err = control_socket_->Connect(server_address_);
   if (err == SOCKET_ERROR) {
     Close();

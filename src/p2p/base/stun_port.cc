@@ -23,7 +23,8 @@
 #include "rtc_base/logging.h"
 #include "rtc_base/net_helpers.h"
 #include "rtc_base/strings/string_builder.h"
-
+#include "api/mp_collector.h"
+#include "api/mp_global.h"
 namespace cricket {
 
 // TODO(?): Move these to a common place (used in relayport too)

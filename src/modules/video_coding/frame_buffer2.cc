@@ -36,8 +36,8 @@ namespace video_coding {
 
 namespace {
 // Max number of frames the buffer will hold.
-constexpr size_t kMaxFramesBuffered = 800;
-
+// constexpr size_t kMaxFramesBuffered = 800;//sandy: Change this to four tome, original value 800
+constexpr size_t kMaxFramesBuffered = 3200;
 // Max number of decoded frame info that will be saved.
 constexpr int kMaxFramesHistory = 1 << 13;
 
@@ -281,7 +281,7 @@ EncodedFrame* FrameBuffer::GetNextFrame() {
       rtt_mult_add_cap_ms = rtt_mult_settings_->rtt_mult_add_cap_ms;
     }
     timing_->SetJitterDelay(
-        jitter_estimator_.GetJitterEstimate(rtt_mult, rtt_mult_add_cap_ms));
+        jitter_estimator_.GetJitterEstimate(rtt_mult, rtt_mult_add_cap_ms));//sandy: Setting the jitter delay.
     timing_->UpdateCurrentDelay(render_time_ms, now_ms);
   } else {
     if (RttMultExperiment::RttMultEnabled() || add_rtt_to_playout_delay_)

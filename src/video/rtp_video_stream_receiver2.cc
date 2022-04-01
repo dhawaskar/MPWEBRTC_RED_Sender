@@ -71,7 +71,8 @@ namespace {
 // TODO(philipel): Change kPacketBufferStartSize back to 32 in M63 see:
 //                 crbug.com/752886
 constexpr int kPacketBufferStartSize = 512;
-constexpr int kPacketBufferMaxSize = 2048;//2048
+// constexpr int kPacketBufferMaxSize = 2048;//2048//sandy: changing it for MP{RTP}
+constexpr int kPacketBufferMaxSize = 8192;//MPRTP
 constexpr int linearwindow=100;
 // int64_t sandy_key_request=0;
 int PacketBufferMaxSize() {

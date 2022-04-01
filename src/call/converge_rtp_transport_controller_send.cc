@@ -7,9 +7,7 @@
  *  in the file PATENTS.  All contributing project authors may
  *  be found in the AUTHORS file in the root of the source tree.
  */
-
-/*Sandy: this is the implementation of MPRTP into WebRTC */
-
+/* Sandy: this is the original file*/
 #include "call/rtp_transport_controller_send.h"
 
 #include <memory>
@@ -33,9 +31,6 @@
 #include "api/mp_collector.h"
 #include "api/mp_global.h"
 #include <limits>
-
-int64_t receiver_rate1;
-int64_t receiver_rate2;
 
 namespace webrtc {
 namespace {
@@ -812,10 +807,10 @@ void RtpTransportControllerSend::UpdateStreamsConfig() {
 int RtpTransportControllerSend::MpFindBestPath(int64_t rtt1,int64_t rtt2,double loss1,double loss2,double rate1,double rate2){
  
 
-  rtt1=mpcollector_->MpGetRTT1();
-  rtt2=mpcollector_->MpGetRTT2();
-  loss1=mpcollector_->MpGetLoss1();
-  loss2=mpcollector_->MpGetLoss2();
+  mpcollector_->MpSetRTT1(rtt1);
+  mpcollector_->MpSetRTT2(rtt2);
+  mpcollector_->MpSetLoss1(loss1);
+  mpcollector_->MpSetLoss2(loss2);
 
   //sandy: If the rtt is too long then that path should be blocked
   // if(rtt1>3000 || rtt2>3000){
@@ -912,22 +907,18 @@ int RtpTransportControllerSend::MpFindBestPath(int64_t rtt1,int64_t rtt2,double 
 }
 
 void RtpTransportControllerSend::MpFindRatio(int64_t rtt1,int64_t rtt2,int64_t rate1,int64_t rate2,int pathid){
-  rtt1=mpcollector_->MpGetRTT1();
-  rtt2=mpcollector_->MpGetRTT2();
-  
   double mpratio;
   
   
   if(pathid==1)
-    mpratio=double(double (rate1)/double(rate1+rate2));
+    mpratio=double(double (rate1)/double(rate2));
   else
-    mpratio=double(double (rate2)/double(rate1+rate2));
+    mpratio=double(double (rate2)/double(rate1));
   if(rtt1==0 && rtt2==0){
     mpratio=0;
   }
 
-  RTC_LOG(INFO)<<"sandyratio: the scheduler ratio= "<<mpratio<<" P1 Rate "<<rate1<<" bps "<< 
-  " P2 Rate "<<rate2<<" bps "<<" RTT1 "<<rtt1<<" ms "<<" RTT2 "<<rtt2<<" ms "<<" Best path "<<pathid;
+  RTC_LOG(INFO)<<"sandyratio: the scheduler ratio= "<<mpratio<<" P1 Rate "<<rate1<<" bps "<<" P2 Rate "<<rate2<<" bps "<<" RTT1 "<<rtt1<<" ms "<<" RTT2 "<<rtt2<<" ms ";
   mpcollector_->MpSetRatio(mpratio);
 }
 
@@ -995,26 +986,70 @@ void RtpTransportControllerSend::PostUpdates(NetworkControlUpdate update,Network
       pacer()->SetCongestionWindow(*update.congestion_window+*sp_congestion_window);
     }
     //Pacing rates
-    //sandy: Set the Pacing rate as 5Mbps
     if (update.pacer_config && update2.pacer_config) {
-      pacer()->SetPacingRates(DataRate::BitsPerSec(25000000),DataRate::BitsPerSec(0)); 
+      RTC_LOG(INFO)<<"sandysched pacer rate: P1 and P2";
+      pp_pacer_config=update.pacer_config;
+      sp_pacer_config=update2.pacer_config;
+      pacer()->SetPacingRates(update.pacer_config->data_rate()+update2.pacer_config->data_rate(),
+                              update.pacer_config->pad_rate()+update2.pacer_config->pad_rate());
+      // if(mpcollector_->MpGetPrimaryWindow()<=0)
+        mpcollector_->MpSetPrimaryWindow(pp_pacer_config->data_window.bytes()/2.5);
+      // if(mpcollector_->MpGetSecondaryWindow()<=0)
+        mpcollector_->MpSetSecondaryWindow(sp_pacer_config->data_window.bytes()/2.5);
+      RTC_LOG(INFO)<<"sandysched the P1 window: "<<pp_pacer_config->data_window.bytes()/2.5<<" : "<<pp_pacer_config->pad_window.bytes() 
+      <<"P2 window: "<<sp_pacer_config->data_window.bytes()/2.5<<" : "<<sp_pacer_config->pad_window.bytes(); 
     }else if(!update.pacer_config && update2.pacer_config){
-      pacer()->SetPacingRates(DataRate::BitsPerSec(25000000),DataRate::BitsPerSec(0));
+      RTC_LOG(INFO)<<"sandysched pacer rate: P2 only";
+      sp_pacer_config=update2.pacer_config;
+      // if(mpcollector_->MpGetSecondaryWindow()<=0)
+        mpcollector_->MpSetSecondaryWindow(sp_pacer_config->data_window.bytes()/2.5);
+      pacer()->SetPacingRates(pp_pacer_config->data_rate()+update2.pacer_config->data_rate(),
+                                pp_pacer_config->pad_rate()+update2.pacer_config->pad_rate());
+        // if(mpcollector_->MpGetPrimaryWindow()<=0)
+          mpcollector_->MpSetPrimaryWindow(pp_pacer_config->data_window.bytes()/2.5);
+        RTC_LOG(INFO)<<"sandysched the P1 window: "<<pp_pacer_config->data_window.bytes()/2.5<<" : "<<pp_pacer_config->pad_window.bytes() 
+      <<"P2 window: "<<sp_pacer_config->data_window.bytes()/2.5<<" : "<<sp_pacer_config->pad_window.bytes(); 
+      pacer()->SetPacingRates(update2.pacer_config->data_rate()+update2.pacer_config->data_rate(),
+                                update2.pacer_config->pad_rate()+update2.pacer_config->pad_rate());
     }else if (update.pacer_config && !update2.pacer_config){
-      pacer()->SetPacingRates(DataRate::BitsPerSec(25000000),DataRate::BitsPerSec(0));
+      RTC_LOG(INFO)<<"sandysched pacer rate: P1 only";
+      pp_pacer_config=update.pacer_config;
+      // if(mpcollector_->MpGetPrimaryWindow()<=0)
+        mpcollector_->MpSetPrimaryWindow(pp_pacer_config->data_window.bytes()/2.5);
+      
+      if(sp_pacer_config){
+        pacer()->SetPacingRates(update.pacer_config->data_rate()+sp_pacer_config->data_rate(),
+                                update.pacer_config->pad_rate()+sp_pacer_config->pad_rate());
+        // if(mpcollector_->MpGetSecondaryWindow()<=0)
+          mpcollector_->MpSetSecondaryWindow(sp_pacer_config->data_window.bytes()/2.5);
+        RTC_LOG(INFO)<<"sandysched the P1 window: "<<pp_pacer_config->data_window.bytes()/2.5<<" : "<<pp_pacer_config->pad_window.bytes() 
+      <<"P2 window: "<<sp_pacer_config->data_window.bytes()/2.5<<" : "<<sp_pacer_config->pad_window.bytes(); 
+      pacer()->SetPacingRates(update.pacer_config->data_rate()+update.pacer_config->data_rate(),
+                                update.pacer_config->pad_rate()+update.pacer_config->pad_rate());
+      }
     }
     //probing 
     for (const auto& probe : update.probe_cluster_configs) {
-      pacer()->CreateProbeCluster(DataRate::BitsPerSec(10000000), probe.id);//sandy: For probing I will consider sum
+      pacer()->CreateProbeCluster(probe.target_data_rate*2, probe.id);//sandy: For probing I will consider sum
     }
     //Target rate
     if (update.target_rate && update2.target_rate) {
+      // RTC_LOG(INFO)<<"sandysched  received P1 and P2 updates";
       pp_target_rate=update.target_rate;
       sp_target_rate=update2.target_rate;
-      mpcollector_->MpSetRTT1(update.target_rate->network_estimate.round_trip_time.ms());
-      mpcollector_->MpSetRTT2(update2.target_rate->network_estimate.round_trip_time.ms());
-      mpcollector_->MpSetLoss1(update.target_rate->network_estimate.loss_rate_ratio);
-      mpcollector_->MpSetLoss2(update2.target_rate->network_estimate.loss_rate_ratio);
+      RTC_LOG(INFO)<<"sandyratio the P1 & p2 rate update: "<<update.target_rate->target_rate.bps()  
+      <<"P2 rate: "<<update2.target_rate->target_rate.bps()<<"P1 : P2 RTT"<<update.target_rate->network_estimate.round_trip_time.ms()<<":"<<  
+      update2.target_rate->network_estimate.round_trip_time.ms()<<"Loss report= "<<update.target_rate->network_estimate.loss_rate_ratio<<":"<< 
+      update2.target_rate->network_estimate.loss_rate_ratio;
+      //sandy:Set the best path
+      mpcollector_->MpSetBestPathId(MpFindBestPath(update.target_rate->network_estimate.round_trip_time.ms(), //RTT1
+                      update2.target_rate->network_estimate.round_trip_time.ms(), //RTT2
+                      update.target_rate->network_estimate.loss_rate_ratio, //Loss1
+                      update2.target_rate->network_estimate.loss_rate_ratio, //Loss 2
+                      update.target_rate->target_rate.bps(),  //Rate 1
+                      update2.target_rate->target_rate.bps())); //Rate 2
+      MpFindRatio(update.target_rate->network_estimate.round_trip_time.ms(),update2.target_rate->network_estimate.round_trip_time.ms(), 
+          update.target_rate->target_rate.bps(),update2.target_rate->target_rate.bps(),mpcollector_->MpGetBestPathId());
 
       update.target_rate->target_rate+=update2.target_rate->target_rate;
       update.target_rate->stable_target_rate+=update2.target_rate->stable_target_rate;
@@ -1028,17 +1063,28 @@ void RtpTransportControllerSend::PostUpdates(NetworkControlUpdate update,Network
       update.target_rate->network_estimate.bwe_period=std::min(update.target_rate->network_estimate.bwe_period, 
         update2.target_rate->network_estimate.bwe_period);
 
-
+      
       control_handler_->SetTargetRate(*update.target_rate);
       UpdateControlState();
     }else if(!update.target_rate && update2.target_rate){
       // RTC_LOG(INFO)<<"sandysched  received P2 updates only";
       sp_target_rate=update2.target_rate;
-      if(pp_target_rate){        
-        mpcollector_->MpSetRTT1(pp_target_rate->network_estimate.round_trip_time.ms());
-        mpcollector_->MpSetRTT2(update2.target_rate->network_estimate.round_trip_time.ms());
-        mpcollector_->MpSetLoss1(pp_target_rate->network_estimate.loss_rate_ratio);
-        mpcollector_->MpSetLoss2(update2.target_rate->network_estimate.loss_rate_ratio);
+      if(pp_target_rate){
+        RTC_LOG(INFO)<<"sandyratio the P2 only rate update: "<<pp_target_rate->target_rate.bps()  
+        <<"P2 rate: "<<update2.target_rate->target_rate.bps()<<"P1 : P2 RTT"<<pp_target_rate->network_estimate.round_trip_time.ms()<<":"<<  
+        update2.target_rate->network_estimate.round_trip_time.ms()<<"Loss report= "<<pp_target_rate->network_estimate.loss_rate_ratio<<":"<< 
+        update2.target_rate->network_estimate.loss_rate_ratio; 
+
+        mpcollector_->MpSetBestPathId(MpFindBestPath(pp_target_rate->network_estimate.round_trip_time.ms(), //RTT1
+                      update2.target_rate->network_estimate.round_trip_time.ms(), //RTT2
+                      pp_target_rate->network_estimate.loss_rate_ratio, //Loss1
+                      update2.target_rate->network_estimate.loss_rate_ratio, //Loss 2
+                      pp_target_rate->target_rate.bps(),  //Rate 1
+                      update2.target_rate->target_rate.bps())); //Rate 2
+        MpFindRatio(pp_target_rate->network_estimate.round_trip_time.ms(), //RTT1
+                  update2.target_rate->network_estimate.round_trip_time.ms(), //RTT2
+                  pp_target_rate->target_rate.bps(),  //Rate 1
+                  update2.target_rate->target_rate.bps(),mpcollector_->MpGetBestPathId());
 
         update2.target_rate->target_rate+=pp_target_rate->target_rate;
         update2.target_rate->stable_target_rate+=pp_target_rate->stable_target_rate;
@@ -1050,7 +1096,7 @@ void RtpTransportControllerSend::PostUpdates(NetworkControlUpdate update,Network
         update2.target_rate->network_estimate.round_trip_time=std::min(update2.target_rate->network_estimate.round_trip_time, 
           pp_target_rate->network_estimate.round_trip_time);
         update2.target_rate->network_estimate.bwe_period=std::min(update2.target_rate->network_estimate.bwe_period, 
-          pp_target_rate->network_estimate.bwe_period);
+          pp_target_rate->network_estimate.bwe_period);        
       }else{
         update2.target_rate->target_rate+=update2.target_rate->target_rate;
         update2.target_rate->stable_target_rate+=update2.target_rate->stable_target_rate;
@@ -1063,10 +1109,22 @@ void RtpTransportControllerSend::PostUpdates(NetworkControlUpdate update,Network
       // RTC_LOG(INFO)<<"sandysched  received P1 updates only";
       pp_target_rate=update.target_rate;
       if(sp_target_rate){
-        mpcollector_->MpSetRTT1(update.target_rate->network_estimate.round_trip_time.ms());
-        mpcollector_->MpSetRTT2(sp_target_rate->network_estimate.round_trip_time.ms());
-        mpcollector_->MpSetLoss1(update.target_rate->network_estimate.loss_rate_ratio);
-        mpcollector_->MpSetLoss2(sp_target_rate->network_estimate.loss_rate_ratio);
+        RTC_LOG(INFO)<<"sandyratio the P1 only rate update: "<<update.target_rate->target_rate.bps()  
+        <<"P2 rate: "<<sp_target_rate->target_rate.bps()<<"P1 : P2 RTT"<<update.target_rate->network_estimate.round_trip_time.ms()<<":"<<  
+        sp_target_rate->network_estimate.round_trip_time.ms()<<"Loss report= "<<update.target_rate->network_estimate.loss_rate_ratio<<":"<< 
+        sp_target_rate->network_estimate.loss_rate_ratio; 
+
+        //sandy:Set the best path
+        mpcollector_->MpSetBestPathId(MpFindBestPath(update.target_rate->network_estimate.round_trip_time.ms(), //RTT1
+                      sp_target_rate->network_estimate.round_trip_time.ms(), //RTT2
+                      update.target_rate->network_estimate.loss_rate_ratio, //Loss1
+                      sp_target_rate->network_estimate.loss_rate_ratio, //Loss 2
+                      update.target_rate->target_rate.bps(),  //Rate 1
+                      sp_target_rate->target_rate.bps())); //Rate 2
+        MpFindRatio(update.target_rate->network_estimate.round_trip_time.ms(), //RTT1
+                  sp_target_rate->network_estimate.round_trip_time.ms(), //RTT2
+                  update.target_rate->target_rate.bps(),  //Rate 1
+                  sp_target_rate->target_rate.bps(),mpcollector_->MpGetBestPathId());
 
         update.target_rate->target_rate+=sp_target_rate->target_rate;
         update.target_rate->stable_target_rate+=sp_target_rate->stable_target_rate;
@@ -1163,38 +1221,17 @@ void RtpTransportControllerSend::OnReceivedRtcpReceiverReportBlocks(
   msg.end_time = now;
   NetworkControlUpdate update;
   if (controller_ && pathid!=2){
-    //sandy: Get the receiver rate of path 1 for MPRTP,assuming RTP packets size is 1200, Maximum payload size is 1200 hence
-    int64_t time_gap=now.ms()-last_report_block_time_.ms();
-    if(time_gap<=0)
-      time_gap=1;
-    int64_t bytes_rcvd=int64_t((int64_t (packets_received_delta))*9600000);
-    receiver_rate1=bytes_rcvd/time_gap;
-    // if(receiver_rate1<0)
-    //   receiver_rate1*=-1;
-    RTC_LOG(INFO)<<"MPRTP total packets: primary path"<<packets_received_delta<< 
-    "bytes_rcvd "<<bytes_rcvd<<" Time gap "<<time_gap<<" rate: "<<receiver_rate1;
     msg.start_time = last_report_block_time_;
     PostUpdates(controller_->OnTransportLossReport(msg),update);
     last_report_block_time_ = now;
   }
   else if(controller_s_ && pathid==2){
-    int64_t time_gap=now.ms()-last_report_block_time_s_.ms();
-    if(time_gap<=0)
-      time_gap=1;
-    int64_t bytes_rcvd=int64_t((int64_t (packets_received_delta))*9600000);
-    receiver_rate2=bytes_rcvd/time_gap;
-    // if(receiver_rate2<0)
-    //   receiver_rate2*=-1;
-    // RTC_LOG(INFO)<<"sandyred this is non-red scheduler";
-    RTC_LOG(INFO)<<"MPRTP total packets: secondary path"<<packets_received_delta<< 
-    "bytes_rcvd "<<bytes_rcvd<<" Time gap "<<time_gap<<" rate: "<<receiver_rate2;
+    RTC_LOG(INFO)<<"sandyred this is non-red scheduler";
     msg.start_time = last_report_block_time_s_;
     PostUpdates(update,controller_s_->OnTransportLossReport(msg));
     last_report_block_time_s_ = now;
   }
-  //sandy: You need to get the receiver rate and call the best path
-  mpcollector_->MpSetBestPathId(MpFindBestPath(0,0,0,0,(double)receiver_rate1,(double)receiver_rate2));
-  MpFindRatio(0,0, (double)receiver_rate1,(double)receiver_rate2,mpcollector_->MpGetBestPathId());
+  
 }
 
 }  // namespace webrtc

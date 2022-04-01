@@ -192,7 +192,7 @@ RTCPSender::RTCPSender(const RtpRtcpInterface::Configuration& config)
       last_payload_type_(-1) {
 
   
-  // RTC_LOG(INFO)<<"sandy the RTCP interval for video "<<report_interval_ms_<<"\n";
+  RTC_LOG(INFO)<<"sandy the RTCP interval for video "<<report_interval_ms_<<"\n";
   RTC_DCHECK(transport_ != nullptr);
 
   builders_[kRtcpSr] = &RTCPSender::BuildSR;

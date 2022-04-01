@@ -26,7 +26,7 @@
 
 namespace webrtc {
 
-constexpr TimeDelta kSendTimeHistoryWindow = TimeDelta::Seconds(60);
+constexpr TimeDelta kSendTimeHistoryWindow = TimeDelta::Seconds(240);//sandy: Changed the send time history
 
 void InFlightBytesTracker::AddInFlightPacketBytes(
     const PacketFeedback& packet) {
@@ -261,14 +261,15 @@ TransportFeedbackAdapter::ProcessTransportFeedbackInner(
       // reported as received by a later feedback.
       history_.erase(it);
     }
-    if (packet_feedback.network_route == network_route_) {
+    //sandy: Multipath and we should not check for
+    // if (packet_feedback.network_route == network_route_) {
       PacketResult result;
       result.sent_packet = packet_feedback.sent;
       result.receive_time = packet_feedback.receive_time;
       packet_result_vector.push_back(result);
-    } else {
-      ++ignored;
-    }
+    // } else {
+      // ++ignored;
+    // }
   }
 
   if (failed_lookups > 0) {

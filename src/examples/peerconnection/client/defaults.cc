@@ -43,7 +43,8 @@ std::string GetPeerConnectionString() {
 }
 
 std::string GetDefaultServerName() {
-  return GetEnvVarOrDefault("WEBRTC_SERVER", "128.138.224.220");
+	return GetEnvVarOrDefault("WEBRTC_SERVER", "128.138.224.207");
+  //return GetEnvVarOrDefault("WEBRTC_SERVER", "128.138.224.164");
 }
 
 std::string GetPeerName() {

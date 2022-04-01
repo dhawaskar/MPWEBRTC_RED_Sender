@@ -835,7 +835,8 @@ void Connection::UpdateState(int64_t now) {
   UpdateReceiving(now);
   if (dead(now)) {
     // RTC_LOG(INFO)<<"sandyconnection: Connection has been dead for long time:";
-    Destroy();
+    //sandy: Dual camera with reduandat scheduler please comment below
+    // Destroy();
   }
 }
 

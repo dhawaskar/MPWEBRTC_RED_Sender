@@ -681,8 +681,9 @@ bool RTPSender::SendToNetwork(std::unique_ptr<RtpPacketToSend> packet) {
 void RTPSender::MPTrafficSplitImplementation(
   std::vector<std::unique_ptr<RtpPacketToSend>> packets,int framesize,bool keyframe){
   int64_t now_ms = clock_->TimeInMilliseconds();
-  if(!sandy_mp_start_time)
+  if(!sandy_mp_start_time){
     sandy_mp_start_time=now_ms;
+  }
   //window based scheduler
   if((mpcollector_->MpGetScheduler().find("window")!=std::string::npos)&&mpcollector_->MpISsecondPathOpen()){
     if(keyframe){
@@ -706,7 +707,7 @@ void RTPSender::MPTrafficSplitImplementation(
       if(split<=0)
         split=1;
       int ratio_count=0;
-      if(mpcollector_->MpGetRatio()==0 || now_ms-sandy_mp_start_time<=10000 ){//sandy: This is only during first 10 seconds
+      if(mpcollector_->MpGetRatio()==0 || now_ms-sandy_mp_start_time <=10000){//sandy: This ratio should only be considered in the begining of 10 seconds
         RTC_LOG(INFO)<<"sandyratio: P1:P2 split "<<split<<" ratio = "<<mpcollector_->MpGetRatio()<<" total "<<packets.size();
         for (auto& packet : packets){
           if(ratio_count<=split){
@@ -752,17 +753,61 @@ void RTPSender::MPTrafficSplitImplementation(
         }
         int p1=split;//Sandy:Best path share
         int p2=(packets.size()-split);//sandy:Worst path share
-
+  
         //sandy: Please make sure best path has highest packets.
         if(p1<p2){
           int temp=p1;
           p1=p2;
           p2=temp;
         }
-        if(p2==0){
-          p2=1;
-          p1=p1-1;
+        double alpha=1.0;
+        // if((packets.size()>2&& p2==0) || mpcollector_->MpGetLossBasedPathId()){
+        //   p1=packets.size()-1;
+        //   p2=1;
+
+        // }
+        //sandy: Check for the Half signal and reduce the number of packets onto path that receives it
+        if(mpcollector_->MpGetHalfSignal()<1.0){
+          alpha*=mpcollector_->MpGetHalfSignal();
+          p2=p2*alpha;
+          if(p2<1.0)
+            p2=1;
+          p1=(packets.size()-p2);;
+          // RTC_LOG(INFO)<<"sandyofo the half signal is enabled for 2 p1= "<<p1<<" p2 "<<p2<<" total= "<<packets.size();
         }
+        //sandy: Make sure you do not send P2 packets more than its window
+        //sandy: Compute total bytes on P2
+        long p2_bytes=0;
+        ratio_count=0;
+        for (auto& packet : packets){
+          if(ratio_count<p2)
+            p2_bytes+=packet->headers_size()+packet->payload_size()+packet->padding_size();
+          else
+            break;
+          ratio_count++;
+        }
+        
+        if(!worst_path_time){
+            worst_path_time=now_ms;
+        }
+        if(now_ms-worst_path_time>=1000){
+          if(mpcollector_->MpGetBestPathId()==2)
+            RTC_LOG(INFO)<<"sandyratio P2 window: "<<mpcollector_->MpGetPrimaryWindow()<<" sent bytes: "<<worst_path_bytes;
+          else
+            RTC_LOG(INFO)<<"sandyratio P2 window: "<<mpcollector_->MpGetSecondaryWindow()<<" sent bytes: "<<worst_path_bytes;
+          worst_path_time=now_ms;
+          worst_path_bytes=p2_bytes;
+        }else{
+          if( (worst_path_bytes>=(115*mpcollector_->MpGetPrimaryWindow())/100 && mpcollector_->MpGetBestPathId()==2)|| 
+            (worst_path_bytes>=(115*mpcollector_->MpGetSecondaryWindow())/100 && mpcollector_->MpGetBestPathId()==1)){
+              p1=packets.size();
+              p2=0;
+          } 
+          else{
+            worst_path_bytes+=p2_bytes;
+          }
+        }
+
         RTC_LOG(INFO)<<"sandyratio: Best:Worst "<<p1<<":"<<p2<<" ratio = "<<mpcollector_->MpGetRatio()<<" total "<<packets.size();
         if(mpcollector_->MpGetBestPathId()==1){//sandy: Waiting to send packets on slow path will create time gap in second path
           ratio_count=0;
@@ -800,6 +845,7 @@ void RTPSender::MPTrafficSplitImplementation(
       }
     }
   }else if(( mpcollector_->MpGetScheduler().find("red")!=std::string::npos) && mpcollector_->MpISsecondPathOpen()) {
+    RTC_LOG(INFO)<<"I am redundant scheduler";
     for (auto& packet : packets) {
       packet->subflow_id=1;
       packet->subflow_seq=packet->SequenceNumber();
@@ -810,6 +856,7 @@ void RTPSender::MPTrafficSplitImplementation(
   else{
     double p1=0,p2=0;
     double alpha=1/2;//For RR P2 always takes half of the packets
+    RTC_LOG(INFO)<<"I am round-robin scheduler";
     if(mpcollector_->MpGetHalfSignal()<1.0 && mpcollector_->MpGetHalfSignaledPathId()==2){
       alpha*=mpcollector_->MpGetHalfSignal();
       p2=packets.size()*alpha;

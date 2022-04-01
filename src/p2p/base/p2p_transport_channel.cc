@@ -1649,7 +1649,14 @@ int P2PTransportChannel::SendPacket(const char* data,
   if(now- mpprint_time>1000 && mpcollector_->MpISsecondPathOpen()){
     mpprint_count++;
     RTC_LOG(INFO)<<mpprint_count<<" MpWebRTCStats "<<(selected_connection_->stats().sent_bytes_second*8)/1000<<" "<<(second_connection_->stats().sent_bytes_second*8)/1000<<" "<< 
-    mpcollector_->MpGetRTT1()<<" "<<mpcollector_->MpGetRTT2()<<" "<<mpcollector_->MpGetLoss1()<<" "<<mpcollector_->MpGetLoss2();
+    mpcollector_->MpGetRTT1()<<" "<<mpcollector_->MpGetRTT2()<<" "<<mpcollector_->MpGetLoss1()<<" "<<mpcollector_->MpGetLoss2()<<" "<< 
+    mpcollector_->MpGetBestPathId();
+    mpprint_time=now;
+  }
+  else if(now- mpprint_time>1000 ){
+    mpprint_count++;
+    RTC_LOG(INFO)<<mpprint_count<<" MpWebRTCStats "<<(selected_connection_->stats().sent_bytes_second*8)/1000<<" 0 "<< 
+    mpcollector_->MpGetRTT1()<<" 0 "<<mpcollector_->MpGetLoss1()<<" 0 ";
     mpprint_time=now;
   }
   // sandy: second path is blocked
@@ -2226,12 +2233,12 @@ void P2PTransportChannel::OnConnectionStateChange(Connection* connection) {
 
   if(selected_connection_){
     if(connection->ToString().find("sandyreceive?= -WI")!=std::string::npos && connection==second_connection_){
-      mpcollector_->MpSetSecondPath(0);
-      second_connection_broke_time=rtc::TimeMillis();
-      /*RTC_LOG(INFO)<<"sandyconnetion removed second connection "<<connection->ToString()<< 
+      // mpcollector_->MpSetSecondPath(0);//sandy: I have disabled path
+      // second_connection_broke_time=rtc::TimeMillis();
+      RTC_LOG(INFO)<<"sandyconnetion removed second connection "<<connection->ToString()<< 
       " stats Receing: "<<connection->stats().receiving<<" Writable: "<< 
       connection->stats().writable<<" Timeout: "<<connection->stats().timeout<<" state: "<<connection->stats().state<< 
-      " new? "<<connection->stats().new_connection;*/
+      " new? "<<connection->stats().new_connection;
       
     }else if( !mpcollector_->MpISsecondPathOpen()){
       int64_t now=rtc::TimeMillis();
