@@ -666,8 +666,7 @@ bool RTPSender::SendToNetwork(std::unique_ptr<RtpPacketToSend> packet) {
   
   std::vector<std::unique_ptr<RtpPacketToSend>> packets;
   packets.emplace_back(std::move(packet));
-  //sandy: All the audio packets should be just sent via primary path.
-  //Because the media channel used for Audio is different and
+  //sandy: All the audio packets should be just sent via primary path.Because the media channel used for Audio is different and
   //it does not use any connection infomration. Hence it is always sent via primary path
   for (auto& packet : packets){
     packet->subflow_id=1;
@@ -681,272 +680,71 @@ bool RTPSender::SendToNetwork(std::unique_ptr<RtpPacketToSend> packet) {
 //sandy: Traffic split function implementation
 void RTPSender::MPTrafficSplitImplementation(
   std::vector<std::unique_ptr<RtpPacketToSend>> packets,int framesize,bool keyframe){
-  sandy_sender_frame_count++;
-  int dup_packets=0;
-  int dup_path=0;
-  std::vector<std::unique_ptr<RtpPacketToSend>> copy_packets;
   int64_t now_ms = clock_->TimeInMilliseconds();
   if(!sandy_mp_start_time){
     sandy_mp_start_time=now_ms;
   }
+  std::vector<std::unique_ptr<RtpPacketToSend>> copy_packets;
   //window based scheduler
   if((mpcollector_->MpGetScheduler().find("window")!=std::string::npos)&&mpcollector_->MpISsecondPathOpen()){
-    if(keyframe){
-
-      RTC_LOG(INFO)<<"sandy sending key frame";
-      for (auto& packet : packets){
-        mpcollector_->MpSetPayloadType(packet->PayloadType());
-        if(mpcollector_->MpGetBestPathId()==1){
-          packet->subflow_id=1;
-          packet->subflow_seq=sequence_number_p_++;
-          packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
-          packet->SetExtension<sandy>(packet->subflow_id);
-        }else{
-          packet->subflow_id=2;
-          packet->subflow_seq=sequence_number_s_++;
-          packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
-          packet->SetExtension<sandy>(packet->subflow_id);
-        }
-      }
-    }else{
-      RTC_LOG(INFO)<<"sandy sending non key frame packets";      
-      int split=packets.size()/2;
-      if(split<=0)
-        split=1;
+      RTC_LOG(INFO)<<"sandy sending frame packets";      
+      int split=0;
       int ratio_count=0;
-      if(mpcollector_->MpGetRatio()==0 || now_ms-sandy_mp_start_time <=10000){//sandy: This ratio should only be considered in the begining of 10 seconds
-        // RTC_LOG(INFO)<<"sandyratio: P1:P2 split "<<split<<" ratio = "<<mpcollector_->MpGetRatio()<<" total "<<packets.size()<<" Frame number "<<sandy_sender_frame_count<< 
-        // " Primary capacity rate"<< mpcollector_->MpGetSendingRate1()/1000<<" Kbps "<< " secondary capacity rate"<< mpcollector_->MpGetSendingRate2()/1000<<" Kbps ";
-        // for (auto& packet : packets){
-        //   if(ratio_count<=split){
-        //     packet->subflow_id=2;
-        //     packet->subflow_seq=sequence_number_s_++;
-        //     packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
-        //     packet->SetExtension<sandy>(packet->subflow_id);
-        //   } else{
-        //     packet->subflow_id=1;
-        //     packet->subflow_seq=sequence_number_p_++;
-        //     packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
-        //     packet->SetExtension<sandy>(packet->subflow_id);
-        //   }
-        //   ratio_count++;
-        // }
-
-        //sandy: Change the logic to copy the packets rather than sending equal number
-        copy_packets.reserve(packets.size());
-        for (const auto& e : packets)
-          copy_packets.push_back(std::make_unique<RtpPacketToSend>(*e));
-        for (auto& packet : copy_packets) {
-          packet->SetPayloadType(50);
-          packet->subflow_id=2;
-          packet->subflow_seq=sequence_number_s_++;
-          packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
-          packet->SetExtension<sandy>(packet->subflow_id);
-        }
-        for (auto& packet : packets) {
-          // RTC_LOG(INFO)<<"sandydup preparing packets to be on primary path";
-          packet->subflow_id=1;
-          packet->subflow_seq=sequence_number_p_++;
-          packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
-          packet->SetExtension<sandy>(packet->subflow_id);
-        }
-
-      }else if(mpcollector_->MpGetFullSignal() && mpcollector_->MpGetFullSignaledPathId()==1 && 
-      mpcollector_->MpISsecondPathOpen()){//sandy:Check for the full signal in primary path
-        // RTC_LOG(INFO)<<"sandyofo: all packets via P2 "<<packets.size();
-        //sandy: Send all the packets via second path
-        for (auto& packet : packets){
-          packet->subflow_id=2;
-          packet->subflow_seq=sequence_number_s_++;
-          packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
-          packet->SetExtension<sandy>(packet->subflow_id);
-        }
-      }else if(mpcollector_->MpGetFullSignal() && mpcollector_->MpGetFullSignaledPathId()==2 && //sandy:Check for the full signal in second path
-      mpcollector_->MpISsecondPathOpen()){
-        // RTC_LOG(INFO)<<"sandyofo: all packets via P1 "<<packets.size();
-        //sandy: Send all the packets via primary path
-        for (auto& packet : packets){
-          packet->subflow_id=1;
-          packet->subflow_seq=sequence_number_p_++;
-          packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
-          packet->SetExtension<sandy>(packet->subflow_id);
-        }
+      double mpratio=0;
+      mpratio=mpcollector_->MpGetRatio();
+      if(packets.size()==1){
+        split=1;
       }else{
-        double mpratio=0;
-        mpratio=mpcollector_->MpGetRatio();
-        if(packets.size()==1){
-          split=1;
-        }else{
-          split=((double)mpratio/(double)(1+mpratio))*packets.size();
-        }
-        int p1=split;//Sandy:Best path share
-        int p2=(packets.size()-split);//sandy:Worst path share
+        split=((double)mpratio/(double)(1+mpratio))*packets.size();
+      }
+      int p1=split;//Sandy:Best path share
+      int p2=(packets.size()-split);//sandy:Worst path share
   
-        //sandy: Please make sure best path has highest packets.
-        if(p1<p2){
-          int temp=p1;
-          p1=p2;
-          p2=temp;
-        }
-        double alpha=1.0;
-        // if((packets.size()>2&& p2==0) || mpcollector_->MpGetLossBasedPathId()){
-        //   p1=packets.size()-1;
-        //   p2=1;
-
-        // }
-        //sandy: Check for the Half signal and reduce the number of packets onto path that receives it
-        if(mpcollector_->MpGetHalfSignal()<1.0){
-          alpha*=mpcollector_->MpGetHalfSignal();
-          p2=p2*alpha;
-          // if(p2<1.0)
-          //   p2=1;
-          p1=(packets.size()-p2);;
-          // RTC_LOG(INFO)<<"sandyofo the half signal is enabled for 2 p1= "<<p1<<" p2 "<<p2<<" total= "<<packets.size();
-        }
-        //sandy: Make sure you do not send P2 packets more than its window
-        //sandy: Compute total bytes on P2
-        long p2_bytes=0;
+      //sandy: Please make sure best path has highest packets.
+      if(p1<p2){
+        int temp=p1;
+        p1=p2;
+        p2=temp;
+      }
+      //sandy: You have to send atleast one packet on slow path
+      if(p2==0){
+        p2=1;
+        p1=packets.size()-1;
+      }
+      RTC_LOG(INFO)<<"sandyratio: Best:Worst "<<p1<<":"<<p2<<" ratio = "<<mpcollector_->MpGetRatio()<<" total "<<packets.size();
+      if(mpcollector_->MpGetBestPathId()==1){//sandy: Waiting to send packets on slow path will create time gap in second path
         ratio_count=0;
         for (auto& packet : packets){
-          if(ratio_count<p2)
-            p2_bytes+=packet->headers_size()+packet->payload_size()+packet->padding_size();
-          else
-            break;
+          if(ratio_count<p2){
+            packet->subflow_id=2;
+            packet->subflow_seq=sequence_number_s_++;
+            packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
+            packet->SetExtension<sandy>(packet->subflow_id);
+          }else{
+            packet->subflow_id=1;
+            packet->subflow_seq=sequence_number_p_++;
+            packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
+            packet->SetExtension<sandy>(packet->subflow_id);
+          }  
           ratio_count++;
         }
-        
-        if(!worst_path_time){
-            worst_path_time=now_ms;
-        }
-        if(now_ms-worst_path_time>=1000){
-          if(mpcollector_->MpGetBestPathId()==2)
-            RTC_LOG(INFO)<<"sandyratio P2 window: "<<mpcollector_->MpGetPrimaryWindow()<<" sent bytes: "<<worst_path_bytes;
-          else
-            RTC_LOG(INFO)<<"sandyratio P2 window: "<<mpcollector_->MpGetSecondaryWindow()<<" sent bytes: "<<worst_path_bytes;
-          worst_path_time=now_ms;
-          worst_path_bytes=p2_bytes;
-        }else{
-          if( (worst_path_bytes>=(115*mpcollector_->MpGetPrimaryWindow())/100 && mpcollector_->MpGetBestPathId()==2)|| 
-            (worst_path_bytes>=(115*mpcollector_->MpGetSecondaryWindow())/100 && mpcollector_->MpGetBestPathId()==1)){
-              p1=packets.size();
-              p2=0;
-          } 
-          else{
-            worst_path_bytes+=p2_bytes;
-          }
-        }
-        //sandy: Check for the assymetry packets
-        if(mpcollector_->MpGetRemoteAsymmetryPackets()>0 && p2>0){
-          int asymetricpackets=mpcollector_->MpGetRemoteAsymmetryPackets();
-          if(asymetricpackets>p2){
-            asymetricpackets=p2;
-          }
-          RTC_LOG(INFO)<<"sandyasymmetry packets: P1 "<<p1<<" P2 "<<p2<<" Asymmetry "<<asymetricpackets;
-          //sandy: Check if you can accomodate the p2 packets on the P1
-          if(mpcollector_->MpGetBestPathId()!=2){//primary path is best path
-            double sendrate=(p1+asymetricpackets)*1500*8;
-            if(sendrate<mpcollector_->MpGetSendingRate1()){
-              RTC_LOG(INFO)<<"sandyasymmetry packets: you can accomdate asymetry packets on P1 "<<p1+asymetricpackets<<" P2 "<<p2-asymetricpackets<<" Asymmetry "<<asymetricpackets;
-              p2-=asymetricpackets;
-              p1=packets.size()-p2;
-              dup_path=2;
-              dup_packets=0;
-            }else{
-              RTC_LOG(INFO)<<"sandyasymmetry you need to reduce the encoding rate overall";
-            }
+      }else{
+        ratio_count=0;
+        for (auto& packet : packets){
+          if(ratio_count<p2){
+            packet->subflow_id=1;
+            packet->subflow_seq=sequence_number_p_++;
+            packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
+            packet->SetExtension<sandy>(packet->subflow_id);
           }else{
-            double sendrate=(p2+asymetricpackets)*1500*8;
-            if(sendrate<mpcollector_->MpGetSendingRate2()){
-              RTC_LOG(INFO)<<"sandyasymmetry packets: you can accomdate asymetry packets on P1 "<<p1- asymetricpackets<<" P2 "<<p2+asymetricpackets<<" Asymmetry "<<asymetricpackets;
-              p2-=asymetricpackets;
-              p1=packets.size()-p2;
-              dup_path=1;
-              dup_packets=0;
-            }else{
-              RTC_LOG(INFO)<<"sandyasymmetry you need to reduce the encoding rate overall";
-            }
+            packet->subflow_id=2;
+            packet->subflow_seq=sequence_number_s_++;
+            packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
+            packet->SetExtension<sandy>(packet->subflow_id);
           }
-          if(p2==0){
-            dup_packets=1;
-          }else{
-            dup_packets=0;
-          }
-        }
-        RTC_LOG(INFO)<<"sandyratio: Best:Worst "<<p1<<":"<<p2<<" ratio = "<<mpcollector_->MpGetRatio()<<" total "<<packets.size()<<" Frame number "<<sandy_sender_frame_count<< 
-        " Primary capacity rate"<< mpcollector_->MpGetSendingRate1()/1000<<" Kbps "<< " secondary capacity rate"<< mpcollector_->MpGetSendingRate2()/1000<<" Kbps ";
-        if(mpcollector_->MpGetBestPathId()==1){//sandy: Waiting to send packets on slow path will create time gap in second path
-          ratio_count=0;
-          for (auto& packet : packets){
-            if(ratio_count<p2){
-              packet->subflow_id=2;
-              packet->subflow_seq=sequence_number_s_++;
-              packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
-              packet->SetExtension<sandy>(packet->subflow_id);
-              
-            }else{
-              packet->subflow_id=1;
-              packet->subflow_seq=sequence_number_p_++;
-              packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
-              packet->SetExtension<sandy>(packet->subflow_id);
-
-            }  
-            ratio_count++;
-          }
-        }else{
-          ratio_count=0;
-          for (auto& packet : packets){
-            if(ratio_count<p2){
-              packet->subflow_id=1;
-              packet->subflow_seq=sequence_number_p_++;
-              packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
-              packet->SetExtension<sandy>(packet->subflow_id);
-            }else{
-              packet->subflow_id=2;
-              packet->subflow_seq=sequence_number_s_++;
-              packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
-              packet->SetExtension<sandy>(packet->subflow_id);
-            }
-            ratio_count++;
-          }
-        }
-        //sandy: Check and send duplicate packets to matinain the minimum telemetry
-        //sandy: Please comment this late 
-        if(dup_packets>0){
-          //sandy: Send one duplicate packet on the slow path
-          copy_packets.reserve(dup_packets);
-          for (const auto& e : packets){
-            if(dup_packets<=0)
-              break;
-            copy_packets.push_back(std::make_unique<RtpPacketToSend>(*e));
-            dup_packets--;
-          }
-          if(dup_path==1){
-            for (auto& packet : copy_packets){
-              packet->SetPayloadType(50);
-              packet->set_packet_type(RtpPacketMediaType::kDupPacket);
-              packet->subflow_id=1;
-              packet->subflow_seq=sequence_number_p_++;
-              packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
-              packet->SetExtension<sandy>(packet->subflow_id); 
-              RTC_LOG(INFO)<<"sandyasymmetry duplicating packet on path "<<dup_path<<" seqnum "<<packet->SequenceNumber()<< 
-              " MpFlowSeqNum  "<<sequence_number_p_<<" Type "<<int(*packet->packet_type())<<"  total duplicating "<<dup_packets;
-            } 
-          }else{
-            for (auto& packet : copy_packets){
-              packet->set_packet_type(RtpPacketMediaType::kDupPacket);
-              packet->SetPayloadType(50);
-              packet->subflow_id=2;
-              packet->subflow_seq=sequence_number_s_++;
-              packet->SetExtension<MpFlowSeqNum>(packet->subflow_seq);
-              packet->SetExtension<sandy>(packet->subflow_id); 
-              RTC_LOG(INFO)<<"sandyasymmetry duplicating packet on path "<<dup_path<<" seqnum "<<packet->SequenceNumber()<< 
-              " MpFlowSeqNum  "<<sequence_number_s_<<" Type "<<int(*packet->packet_type())<<"  total duplicating "<<dup_packets;
-            }
-          }
-          // RTC_LOG(INFO)<<" sandyasymmetry duplicating packes on slow path to maintain minimum telemetry "<<copy_packets.size();
-        }//End of dup packets
+          ratio_count++;
+       }
       }
-    }
   }else if(( mpcollector_->MpGetScheduler().find("red")!=std::string::npos) && mpcollector_->MpISsecondPathOpen()) {
     RTC_LOG(INFO)<<"I am redundant scheduler";
     for (auto& packet : packets) {

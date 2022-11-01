@@ -65,9 +65,9 @@ void RemoteEstimatorProxy::IncomingPacket(int64_t arrival_time_ms,
                                           const RTPHeader& header) {
 
 
-  //RTC_LOG(INFO)<<"sandytfb incoming packet in remote_estimator_proxy\n";
+  
   if (arrival_time_ms < 0 || arrival_time_ms > kMaxTimeMs) {
-    RTC_DLOG(LS_ERROR) << "sandyrtp Arrival time out of bounds: " << arrival_time_ms;
+    // RTC_DLOG(LS_ERROR) << "sandyrtp Arrival time out of bounds: " << arrival_time_ms;
     return;
   }
   rtc::CritScope cs(&lock_);
@@ -77,7 +77,7 @@ void RemoteEstimatorProxy::IncomingPacket(int64_t arrival_time_ms,
   //First simply send the packets to specific path and then implement the contents.
   int pathid=-1,subflow_seq=-1;
   int64_t seq_p = 0,seq_s=0;
-
+  if(header.payloadType==50)RTC_LOG(INFO)<<"sandyasymmetry the packet path id="<<header.payloadType;
   if(header.extension.hassandy && header.extension.hasMpTransportSequenceNumber){
     //sandy: When packets from second path flow in primary it means second connection
     //was turned off and hence they flew in primary. But there is no accounting for those 

@@ -533,7 +533,7 @@ EncodedImageCallback::Result RtpVideoSender::OnEncodedImage(
     // The payload router could be active but this module isn't sending.
     return Result(Result::ERROR_SEND_FAILED);
   }
-
+  //sandy: FrameRate is sent now
   absl::optional<int64_t> expected_retransmission_time_ms;
   if (encoded_image.RetransmissionAllowed()) {
     expected_retransmission_time_ms =
@@ -773,7 +773,7 @@ void RtpVideoSender::OnBitrateUpdated(BitrateAllocationUpdate update,
   // Get the encoder target rate. It is the estimated network rate -
   // protection overhead.
   // TODO(srte): We should multiply with 255 here.
-  encoder_target_rate_bps_ = fec_controller_->UpdateFecRates(
+  encoder_target_rate_bps_ = fec_controller_->UpdateFecRates(//sandy: FEC controller
       payload_bitrate_bps, framerate,
       rtc::saturated_cast<uint8_t>(update.packet_loss_ratio * 256),
       loss_mask_vector_, update.round_trip_time.ms());

@@ -199,7 +199,7 @@ void StreamStatisticianImpl::UpdateCounters(const RtpPacketReceived& packet) {
 
 
   rtc::CritScope cs(&stream_lock_);
-  // RTC_LOG(INFO)<<"sandy the received packet path="<<packet.subflow_id<<" seq= "<<packet.SequenceNumber()<<
+  // if(packet.PayloadType()==50)RTC_LOG(INFO)<<"sandyasymmetry the packet path id="<<packet.subflow_id<<" seq= "<<packet.SequenceNumber()<<
   // " mp_seq= "<<packet.subflow_seq<<" payload type"<<packet.PayloadType()<<"\n";
 
   RTC_DCHECK_EQ(ssrc_, packet.Ssrc());

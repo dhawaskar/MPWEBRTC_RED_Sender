@@ -43,10 +43,11 @@ class Conductor : public webrtc::PeerConnectionObserver,
     SEND_MESSAGE_TO_PEER,
     NEW_TRACK_ADDED,
     MP_NEW_TRACK_ADDED,
+    MP_NEW_TRACK_ADDED1,
     TRACK_REMOVED,
   };
 
-  Conductor(PeerConnectionClient* client, MainWindow* main_wnd,MainWindow* mp_main_wnd);
+  Conductor(PeerConnectionClient* client, MainWindow* main_wnd,MainWindow* mp_main_wnd,MainWindow* mp_main_wnd1);
 
   bool connection_active() const;
 
@@ -131,6 +132,7 @@ class Conductor : public webrtc::PeerConnectionObserver,
   PeerConnectionClient* client_;
   MainWindow* main_wnd_;
   MainWindow* mp_main_wnd_;
+  MainWindow* mp_main_wnd1_;
   std::deque<std::string*> pending_messages_;
   std::string server_;
 };

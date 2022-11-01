@@ -54,7 +54,11 @@ class RTC_EXPORT RtpPacketInfo {
   void set_rtp_timestamp(uint32_t value) { rtp_timestamp_ = value; }
 
   int64_t sandy_arrival_time() const { return sandy_arrival_time_; }
+  int sandy_path_id() const{return sandy_path_id_;}
+  int64_t sandy_sequenceNumber() const{return sandy_sequence_number_;}
   void set_sandy_arrival_time(int64_t value) { sandy_arrival_time_ = value; }
+  void set_sandy_path_id(int pathid){sandy_path_id_=pathid;}
+  void set_sandy_sequenceNumber(int64_t seq_num){sandy_sequence_number_=seq_num;}
 
   absl::optional<uint8_t> audio_level() const { return audio_level_; }
   void set_audio_level(absl::optional<uint8_t> value) { audio_level_ = value; }
@@ -88,6 +92,8 @@ class RTC_EXPORT RtpPacketInfo {
   // Local |webrtc::Clock|-based timestamp of when the packet was received.
   int64_t receive_time_ms_;
   int64_t sandy_arrival_time_;
+  int sandy_path_id_;
+  int64_t sandy_sequence_number_;
 };
 
 bool operator==(const RtpPacketInfo& lhs, const RtpPacketInfo& rhs);

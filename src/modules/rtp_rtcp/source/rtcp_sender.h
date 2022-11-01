@@ -211,9 +211,19 @@ class RTCPSender final {
       RTC_EXCLUSIVE_LOCKS_REQUIRED(critical_section_rtcp_sender_);
   std::unique_ptr<rtcp::RtcpPacket> BuildTMMBN(const RtcpContext& context,const int pathid)
       RTC_EXCLUSIVE_LOCKS_REQUIRED(critical_section_rtcp_sender_);
+  std::unique_ptr<rtcp::RtcpPacket> BuildAPPQUIC(const RtcpContext& context,const int pathid)
+      RTC_EXCLUSIVE_LOCKS_REQUIRED(critical_section_rtcp_sender_);
   std::unique_ptr<rtcp::RtcpPacket> BuildAPPHalf(const RtcpContext& context,const int pathid)
       RTC_EXCLUSIVE_LOCKS_REQUIRED(critical_section_rtcp_sender_);
   std::unique_ptr<rtcp::RtcpPacket> BuildAPPFull(const RtcpContext& context,const int pathid)
+      RTC_EXCLUSIVE_LOCKS_REQUIRED(critical_section_rtcp_sender_);
+  std::unique_ptr<rtcp::RtcpPacket> BuildAPPMPFrameRate(const RtcpContext& context,const int pathid)
+      RTC_EXCLUSIVE_LOCKS_REQUIRED(critical_section_rtcp_sender_);
+  std::unique_ptr<rtcp::RtcpPacket> BuildAPPMpAsymmetry(const RtcpContext& context,const int pathid)
+      RTC_EXCLUSIVE_LOCKS_REQUIRED(critical_section_rtcp_sender_);
+  std::unique_ptr<rtcp::RtcpPacket> BuildAPPMpRR1(const RtcpContext& context,const int pathid)
+      RTC_EXCLUSIVE_LOCKS_REQUIRED(critical_section_rtcp_sender_);
+  std::unique_ptr<rtcp::RtcpPacket> BuildAPPMpRR2(const RtcpContext& context,const int pathid)
       RTC_EXCLUSIVE_LOCKS_REQUIRED(critical_section_rtcp_sender_);
   std::unique_ptr<rtcp::RtcpPacket> BuildLossNotification(
       const RtcpContext& context,const int pathid)

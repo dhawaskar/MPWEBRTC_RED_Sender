@@ -37,7 +37,9 @@
 #include "rtc_base/trace_event.h"
 #include "system_wrappers/include/clock.h"
 #include "system_wrappers/include/field_trial.h"
-
+#include "api/mp_collector.h"
+#include "api/mp_global.h"
+int64_t framerate_update_time=0;
 namespace webrtc {
 namespace internal {
 namespace {
@@ -601,7 +603,17 @@ EncodedImageCallback::Result VideoSendStreamImpl::OnEncodedImage(
   } else {
     update_task();
   }
-
+  //sandy: Frame Rate sent from the sender
+  //sandy: Every second update the frame rate
+  int64_t now_ms = clock_->TimeInMilliseconds();
+  if(!framerate_update_time){
+    framerate_update_time=now_ms;
+  }
+  if(now_ms- framerate_update_time>1000){
+    RTC_LOG(INFO)<<"sandyframerate the sending frame rate is "<<stats_proxy_->GetSendFrameRate();  
+    mpcollector_->MpSetFrameRate(stats_proxy_->GetSendFrameRate()); 
+    framerate_update_time=now_ms;
+  }
   return result;
 }
 

@@ -946,7 +946,7 @@ void ReceiveStatisticsProxy::OnRenderedFrame(
       if(!e2e_time){
         e2e_time=now_ms;
       }
-      if(now_ms- e2e_time>1000){
+      if(now_ms- e2e_time>=1000){
         mp_count++;
         int64_t e2e_avg=0;
         if(mp_e2e_.size()>0)

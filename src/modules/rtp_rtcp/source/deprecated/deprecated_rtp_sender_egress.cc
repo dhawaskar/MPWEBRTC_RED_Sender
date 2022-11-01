@@ -288,6 +288,7 @@ DEPRECATED_RtpSenderEgress::GetSentRtpPacketInfos(
 bool DEPRECATED_RtpSenderEgress::HasCorrectSsrc(
     const RtpPacketToSend& packet) const {
   switch (*packet.packet_type()) {
+    case RtpPacketMediaType::kDupPacket:
     case RtpPacketMediaType::kAudio:
     case RtpPacketMediaType::kVideo:
       return packet.Ssrc() == ssrc_;

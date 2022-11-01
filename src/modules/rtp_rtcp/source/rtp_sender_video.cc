@@ -619,7 +619,7 @@ bool RTPSenderVideo::SendVideo(
     }
 
   }
-
+  RTC_LOG(INFO)<<"sandyfec Total number of RTP packets= "<<rtp_packets.size();
   if (fec_generator_) {
     // Fetch any FEC packets generated from the media frame and add them to
     // the list of packets to send.
@@ -631,8 +631,9 @@ bool RTPSenderVideo::SendVideo(
       }
       rtp_packets.emplace_back(std::move(fec_packet));
     }
+    RTC_LOG(INFO)<<"sandyfec its equalent FEC packets="<<fec_packets.size();
   }
-
+  
   LogAndSendToNetwork(std::move(rtp_packets), unpacketized_payload_size);
 
   // Update details about the last sent frame.

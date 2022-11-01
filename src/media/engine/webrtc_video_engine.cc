@@ -260,11 +260,11 @@ static int GetMaxDefaultVideoBitrateKbps(int width,
                                          bool is_screenshare) {
   int max_bitrate;
   if (width * height <= 320 * 240) {
-    max_bitrate = 600;
+    max_bitrate = 10000;//600;
   } else if (width * height <= 640 * 480) {
-    max_bitrate = 1700;
+    max_bitrate = 10000;//1700;
   } else if (width * height <= 960 * 540) {
-    max_bitrate = 2000;
+    max_bitrate = 10000;//500;
   } else {
     max_bitrate = 10000;//2500
   }
@@ -760,7 +760,7 @@ bool WebRtcVideoChannel::GetChangedSendParameters(
     if (negotiated_codecs.empty()) {
       changed_params->send_codec = absl::nullopt;
     } else if (send_codec_ != negotiated_codecs.front()) {
-      //changed_params->send_codec = negotiated_codecs.front();//sandy: Changing it to H264
+      // changed_params->send_codec = negotiated_codecs.front();//sandy: Changing it to H264
 	    for (const auto& send_codec : negotiated_codecs){
         if(send_codec.codec.ToString().find("H264")!=std::string::npos){
           changed_params->send_codec = send_codec;

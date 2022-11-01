@@ -26,6 +26,7 @@
 #include "rtc_base/logging.h"
 #include "api/mp_collector.h"
 #include "api/mp_global.h"
+int64_t previous_sent_framerate=0;
 
 #ifdef _WIN32
 // Disable warning C4355: 'this' : used in base member initializer list.
@@ -518,7 +519,17 @@ bool ModuleRtpRtcpImpl2::OnSendingRtpFrame(uint32_t timestamp,
                                            bool force_sender_report) {
   if (!Sending())
     return false;
-
+  uint32_t fps=mpcollector_->MpGetFrameRate();
+  if(fps && !previous_sent_framerate){
+    // RTC_LOG(INFO)<<"sandyframerate sent the frame and sending rate:"<<fps;
+    previous_sent_framerate=fps;
+    SendRTCP(kAppSubtypeMPFrameRate);
+  }else if(previous_sent_framerate!=fps){
+    // RTC_LOG(INFO)<<"sandyframerate sent the frame and sending rate:"<<fps;
+    //sandy : Now send the sender side frame rate expected
+    previous_sent_framerate=fps;
+    SendRTCP(kAppSubtypeMPFrameRate);
+  }
   rtcp_sender_.SetLastRtpTime(timestamp, capture_time_ms, payload_type);
   // Make sure an RTCP report isn't queued behind a key frame.
 
@@ -688,9 +699,10 @@ int64_t ModuleRtpRtcpImpl2::ExpectedRetransmissionTimeMs() const {
 // Force a send of an RTCP packet.: Usully when pli or fir is requested from receiver
 // Normal SR and RR are triggered via the process function.
 int32_t ModuleRtpRtcpImpl2::SendRTCP(RTCPPacketType packet_type) {//sandy: Request to send the Picture loss infromation:pli or key frame
-  if(packet_type==kAppSubtypeMpHalf || packet_type==kAppSubtypeMpFull){
+  //sandyframerate
+  if(packet_type==kAppSubtypeMPFrameRate || packet_type==kAppSubtypeMpHalf || packet_type==kAppSubtypeMpFull || packet_type==kAppSubtypeQUIC){
     RTCPSender::FeedbackState state;
-    RTC_LOG(INFO)<<"sandyofo creating App specific message\n";
+    RTC_LOG(INFO)<<"sandyofo creating App specific message "<<packet_type;
     if(mpcollector_->MpGetBestPathId()==1)
       return rtcp_sender_.SendRTCP(GetFeedbackStatePrimary(), packet_type,0,0,1);//sandy: Pli is sent via primary path
     else 

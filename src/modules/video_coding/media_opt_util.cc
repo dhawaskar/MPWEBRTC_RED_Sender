@@ -14,7 +14,7 @@
 #include <math.h>
 
 #include <algorithm>
-
+#include "rtc_base/logging.h"
 #include "modules/video_coding/fec_rate_table.h"
 #include "modules/video_coding/internal_defines.h"
 #include "modules/video_coding/utility/simulcast_rate_allocator.h"
@@ -336,7 +336,7 @@ bool VCMFecMethod::ProtectionFactor(const VCMProtectionParameters* parameters) {
   // Get index for table: the FEC protection depends on an effective rate.
   // The range on the rate index corresponds to rates (bps)
   // from ~200k to ~8000k, for 30fps
-  const uint16_t effRateFecTable =
+  const uint16_t effRateFecTable =//sandy
       rtc::saturated_cast<uint16_t>(resolnFac * bitRatePerFrame);
   uint8_t rateIndexTable = rtc::saturated_cast<uint8_t>(
       VCM_MAX(VCM_MIN((effRateFecTable - ratePar1) / ratePar1, ratePar2), 0));
@@ -523,12 +523,15 @@ void VCMLossProtectionLogic::SetMethod(
   switch (newMethodType) {
     case kNack:
       _selectedMethod.reset(new VCMNackMethod());
+      RTC_LOG(INFO)<<"sandyfec Methid is only NACK";
       break;
     case kFec:
       _selectedMethod.reset(new VCMFecMethod());
+      RTC_LOG(INFO)<<"sandyfec Methid is only FEC";
       break;
     case kNackFec:
       _selectedMethod.reset(new VCMNackFecMethod(kLowRttNackMs, -1));
+      RTC_LOG(INFO)<<"sandyfec Methid is only NEC+Nack";
       break;
     case kNone:
       _selectedMethod.reset();

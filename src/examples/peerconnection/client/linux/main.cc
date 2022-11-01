@@ -93,8 +93,14 @@ int main(int argc, char* argv[]) {
   GtkMainWnd mp_wnd(server.c_str(), 0,
                  absl::GetFlag(FLAGS_autoconnect),
                  absl::GetFlag(FLAGS_autocall));;
-  mp_wnd.Create();//sandy
-  
+  mp_wnd.Create();//sandysecond camera
+ 
+  //sandy: Third camera
+  GtkMainWnd mp_wnd1(server.c_str(), 0,
+                 absl::GetFlag(FLAGS_autoconnect),
+                 absl::GetFlag(FLAGS_autocall));;
+ mp_wnd1.Create();//sandysecond camera
+   
   
   GtkMainWnd wnd(server.c_str(), absl::GetFlag(FLAGS_port),
                  absl::GetFlag(FLAGS_autoconnect),
@@ -107,7 +113,7 @@ int main(int argc, char* argv[]) {
   // Must be constructed after we set the socketserver.
   PeerConnectionClient client;
   rtc::scoped_refptr<Conductor> conductor(
-      new rtc::RefCountedObject<Conductor>(&client, &wnd,&mp_wnd));
+      new rtc::RefCountedObject<Conductor>(&client, &wnd,&mp_wnd,&mp_wnd1));//Adding three windows for three streams
   socket_server.set_client(&client);
   socket_server.set_conductor(conductor);
 
@@ -116,7 +122,7 @@ int main(int argc, char* argv[]) {
   // gtk_main();
   wnd.Destroy();
   mp_wnd.Destroy();
-
+  mp_wnd1.Destroy();
   // TODO(henrike): Run the Gtk main loop to tear down the connection.
   /*
   while (gtk_events_pending()) {

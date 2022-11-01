@@ -23,6 +23,10 @@ class CommonHeader;
 
 class App : public RtcpPacket {
  public:
+  int pathid_=3;
+  void SetPathId(int pathid){
+    pathid_=pathid;
+  }
   static constexpr uint8_t kPacketType = 204;
   App();
   App(App&&) = default;

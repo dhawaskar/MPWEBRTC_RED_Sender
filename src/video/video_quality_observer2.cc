@@ -35,6 +35,8 @@ constexpr int kPixelsInMediumResolution = 640 * 360;
 constexpr int kBlockyQpThresholdVp8 = 70;
 constexpr int kBlockyQpThresholdVp9 = 180;
 constexpr int kMaxNumCachedBlockyFrames = 100;
+int64_t sandy_rendered_time=0;
+int sandy_rendered_frame=0;
 // TODO(ilnik): Add H264/HEVC thresholds.
 }  // namespace
 
@@ -136,6 +138,7 @@ void VideoQualityObserver::UpdateHistograms(bool screenshare) {
 
 void VideoQualityObserver::OnRenderedFrame(
     const VideoFrameMetaData& frame_meta) {
+  int64_t now_ms = rtc::TimeMillis();
   RTC_DCHECK_LE(last_frame_rendered_ms_, frame_meta.decode_timestamp.ms());
   RTC_DCHECK_LE(last_unfreeze_time_ms_, frame_meta.decode_timestamp.ms());
 
@@ -224,8 +227,16 @@ void VideoQualityObserver::OnRenderedFrame(
   if (is_last_frame_blocky_) {
     blocky_frames_.erase(blocky_frames_.begin(), ++blocky_frame_it);
   }
-
   ++num_frames_rendered_;
+  if(sandy_rendered_time==0){
+    sandy_rendered_time=now_ms;
+    sandy_rendered_frame=num_frames_rendered_;
+  }
+  if(now_ms- sandy_rendered_time >=1000){
+    RTC_LOG(LS_INFO)<<"sandyofo the rendered frame "<<(num_frames_rendered_- sandy_rendered_frame);
+    sandy_rendered_time=now_ms;
+    sandy_rendered_frame=num_frames_rendered_;
+  }
 }
 
 void VideoQualityObserver::OnDecodedFrame(uint32_t rtp_frame_timestamp,

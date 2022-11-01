@@ -1648,15 +1648,17 @@ int P2PTransportChannel::SendPacket(const char* data,
   //sandy: Get the stats
   if(now- mpprint_time>1000 && mpcollector_->MpISsecondPathOpen()){
     mpprint_count++;
-    RTC_LOG(INFO)<<mpprint_count<<" MpWebRTCStats "<<(selected_connection_->stats().sent_bytes_second*8)/1000<<" "<<(second_connection_->stats().sent_bytes_second*8)/1000<<" "<< 
+    RTC_LOG(INFO)<<mpprint_count<<" MpWebRTCStats Send"<<(selected_connection_->stats().sent_bytes_second*8)/1000<<" "<<(second_connection_->stats().sent_bytes_second*8)/1000<<" "<< 
     mpcollector_->MpGetRTT1()<<" "<<mpcollector_->MpGetRTT2()<<" "<<mpcollector_->MpGetLoss1()<<" "<<mpcollector_->MpGetLoss2()<<" "<< 
     mpcollector_->MpGetBestPathId();
+    RTC_LOG(INFO)<<mpprint_count<<" MpWebRTCStats Receiver"<<(selected_connection_->stats().recv_bytes_second*8)/1000<<" "<<(second_connection_->stats().recv_bytes_second*8)/1000;
     mpprint_time=now;
   }
   else if(now- mpprint_time>1000 ){
     mpprint_count++;
     RTC_LOG(INFO)<<mpprint_count<<" MpWebRTCStats "<<(selected_connection_->stats().sent_bytes_second*8)/1000<<" 0 "<< 
     mpcollector_->MpGetRTT1()<<" 0 "<<mpcollector_->MpGetLoss1()<<" 0 ";
+    RTC_LOG(INFO)<<mpprint_count<<" MpWebRTCStats Receiver"<<(selected_connection_->stats().recv_bytes_second*8)/1000;
     mpprint_time=now;
   }
   // sandy: second path is blocked
@@ -2260,28 +2262,36 @@ void P2PTransportChannel::OnConnectionStateChange(Connection* connection) {
 
       if((selected_connection_->stats().remote_candidate.address().port()!=stats.remote_candidate.address().port()) && 
         (selected_connection_->stats().local_candidate.address().port()!=stats.local_candidate.address().port()) && 
+        // (stats.local_candidate.type()=="local") &&
+        // (stats.local_candidate.address() != stats.remote_candidate.address()) && (stats.remote_candidate.type()!="prflx") && 
 
-        (stats.local_candidate.type()=="local" && stats.remote_candidate.type()=="local") &&
+        // (stats.local_candidate.type()=="local" && stats.remote_candidate.type()=="local") &&
+        // (stats.local_candidate.type()=="local" && stats.remote_candidate.type()=="srflx") &&
         // ((stats.local_candidate.type()=="local" && stats.remote_candidate.type()=="local")||(stats.local_candidate.type()=="relay" &&  
      //    stats.remote_candidate.type()=="relay")) && 
         (stats.local_candidate.protocol()=="udp" && stats.remote_candidate.protocol()=="udp"))
       {
         if(connection->stats().receiving){
           second_connection_= connection;
+          mpcollector_->MpSetSecondaryConnection(second_connection_);
+          mpcollector_->MpSetPriamryConnection(selected_connection_);
           mpcollector_->MpSetSecondPath(1);  
           RTC_DLOG(LS_ERROR)<<"sandychrome ***** This connection is writable  ***** "<< connection->ToString()<< 
-        " Primary connection:"<<selected_connection_->ToString()<<" interface: "<< i<<":"<<i1;
+        " Primary connection:"<<selected_connection_->ToString()<<" interface: "<< i<<":"<<i1<<" Local type: "<<stats.local_candidate.type()<<" Remote type: " 
+        <<stats.remote_candidate.type();
         }else{
           PingConnection(connection);
           PingConnection(connection);
           PingConnection(connection);
           RTC_DLOG(LS_ERROR)<<"sandychrome ***** This connection is writable  in future ***** "<< connection->ToString()<< 
-        " Primary connection:"<<selected_connection_->ToString()<<" interface: "<< i<<":"<<i1;  
+        " Primary connection:"<<selected_connection_->ToString()<<" interface: "<< i<<":"<<i1<<" Local type: "<<stats.local_candidate.type()<<" Remote type: " 
+        <<stats.remote_candidate.type();  
         }
         
       }else{
         RTC_LOG(LS_INFO)<<"sandychrome ***** This connection is not writable  ***** "<< connection->ToString()<< 
-        " Primary connection:"<<selected_connection_->ToString()<<" interface: "<< i<<":"<<i1;
+        " Primary connection:"<<selected_connection_->ToString()<<" interface: "<< i<<":"<<i1<<" Local type: "<<stats.local_candidate.type()<<" Remote type: " 
+        <<stats.remote_candidate.type();
       }
     }
   }

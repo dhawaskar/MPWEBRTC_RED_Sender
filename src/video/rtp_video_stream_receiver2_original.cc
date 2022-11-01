@@ -78,6 +78,7 @@ namespace {
 constexpr int kPacketBufferStartSize = 512;
 constexpr int kPacketBufferMaxSize = 2048;//2048
 // constexpr int kPacketBufferMaxSize = 8192;//MPRTP
+constexpr int linearwindow=100;
 constexpr int linearwindow_asymmetry=33;
 
 // int64_t sandy_key_request=0;
@@ -705,8 +706,7 @@ void RtpVideoStreamReceiver2::OnRtpPacket(const RtpPacketReceived& packet) {
   
   RTPHeader header;
   packet.GetHeader(&header);
-  // if(header.payloadType==50)
-  //   RTC_LOG(INFO)<<"sandyasymmetry duplicate packet :"<<packet.pathid<<" in header: "<<header.extension.sandy;
+  // RTC_LOG(INFO)<<"sandyrtx the path id :"<<packet.pathid<<" in header: "<<header.extension.sandy;
   //sandy: Retransmitted packets will have different path id
   RTC_DCHECK(packet.pathid>0 && packet.pathid==header.extension.sandy);
   RTC_DCHECK_RUN_ON(&worker_task_checker_);
@@ -715,7 +715,7 @@ void RtpVideoStreamReceiver2::OnRtpPacket(const RtpPacketReceived& packet) {
     return;
   }
 
-  if (!packet.recovered() && header.payloadType!=50) {
+  if (!packet.recovered()) {
     // TODO(nisse): Exclude out-of-order packets?
     int64_t now_ms = clock_->TimeInMilliseconds();
 
@@ -743,8 +743,7 @@ void RtpVideoStreamReceiver2::OnRtpPacket(const RtpPacketReceived& packet) {
     }
   }
 
-  if(header.payloadType!=50)
-    ReceivePacket(packet);
+  ReceivePacket(packet);
 
   // Update receive statistics after ReceivePacket.
   // Receive statistics will be reset if the payload type changes (make sure
@@ -753,10 +752,8 @@ void RtpVideoStreamReceiver2::OnRtpPacket(const RtpPacketReceived& packet) {
     rtp_receive_statistics_->OnRtpPacket(packet);
   }
 
-  if(header.payloadType!=50){
-    for (RtpPacketSinkInterface* secondary_sink : secondary_sinks_) {
-      secondary_sink->OnRtpPacket(packet);
-    }
+  for (RtpPacketSinkInterface* secondary_sink : secondary_sinks_) {
+    secondary_sink->OnRtpPacket(packet);
   }
 }
 
@@ -880,32 +877,38 @@ void RtpVideoStreamReceiver2::OnInsertedPacket(
   assymetrypackets_avg=0;
   mp_receiverrate_primary_avg=0;
   mp_receiverrate_secondary_avg=0;
-  primarypackettimes.clear();
-  secondarypackettimes.clear();  
+
 
   for (auto& packet : result.packets) {
+    
+    if(packet->packet_info.sandy_path_id()!=2){
+      primarypacket++;
+      RTC_LOG(INFO)<<"sandyplayout packet: seq: "<<packet->packet_info.sandy_sequenceNumber()<<"pathid"<<packet->packet_info.sandy_path_id();
+      primarypackettimes.insert(primarypackettimes.begin(),packet->packet_info.sandy_arrival_time());
+      if(packet->times_nacked){
+        primarynackpacket++;
         
+      }
+    }else if(packet->packet_info.sandy_path_id()==2){
+      secondarypacket++;
+      secondarypackettimes.insert(secondarypackettimes.begin(),packet->packet_info.sandy_arrival_time());
+      RTC_LOG(INFO)<<"sandyplayout packet: seq: "<<packet->packet_info.sandy_sequenceNumber()<<"pathid"<<packet->packet_info.sandy_path_id();
+      if(packet->times_nacked>0){
+        secondarynackpacket++;
+        
+      }
+    }
+
+    
     // PacketBuffer promisses frame boundaries are correctly set on each
     // packet. Document that assumption with the DCHECKs.
     RTC_DCHECK_EQ(frame_boundary, packet->is_first_packet_in_frame());
     
     if (packet->is_first_packet_in_frame()) {
-      // RTC_DCHECK(primarypackettimes.size()<=0);
-      // RTC_DCHECK(secondarypackettimes.size()<=0);
-      if(packet->packet_info.sandy_path_id()!=2){
+      if(packet->packet_info.sandy_path_id()!=2)
         firstpacketpath=1;
-        primarypacket++;
-        primarypackettimes.insert(primarypackettimes.begin(),packet->packet_info.sandy_arrival_time());
-        if(packet->times_nacked)
-          primarynackpacket++;
-      }
-      else{
+      else
         firstpacketpath=2;
-        secondarypacket++;
-        secondarypackettimes.insert(secondarypackettimes.begin(),packet->packet_info.sandy_arrival_time());
-        if(packet->times_nacked>0)
-          secondarynackpacket++;
-      }
       RTC_LOG(INFO)<<"sandyplayout received packet: ***** First Packets Time "<<packet->packet_info.sandy_arrival_time()<<" Path ID: "<<packet->packet_info.sandy_path_id()<< 
       "Sequence number "<< packet->packet_info.sandy_sequenceNumber() << "Nack Count "<<packet->times_nacked;
 
@@ -918,18 +921,6 @@ void RtpVideoStreamReceiver2::OnInsertedPacket(
       // sandy_start_time=packet->packet_info.receive_time_ms();
       sandy_start_time=packet->packet_info.sandy_arrival_time();
     } else {
-      if(packet->packet_info.sandy_path_id()!=2){
-        primarypacket++;
-        primarypackettimes.insert(primarypackettimes.begin(),packet->packet_info.sandy_arrival_time());
-        if(packet->times_nacked)
-          primarynackpacket++;
-      }
-      else{
-        secondarypacket++;
-        secondarypackettimes.insert(secondarypackettimes.begin(),packet->packet_info.sandy_arrival_time());
-        if(packet->times_nacked>0)
-          secondarynackpacket++;
-      }
 
       RTC_LOG(INFO)<<"sandyplayout received packet: Packets Time "<<packet->packet_info.sandy_arrival_time()<<" Path ID: "<<packet->packet_info.sandy_path_id()<< 
       "Sequence number "<< packet->packet_info.sandy_sequenceNumber() << "Nack Count "<<packet->times_nacked<<" Is last packet? "<<packet->is_last_packet_in_frame();
@@ -994,7 +985,21 @@ void RtpVideoStreamReceiver2::OnInsertedPacket(
         if(sandy_time_window==0){
           sandy_time_window=now_ms;
         }     
+        // //sandy: Get the smooth receiver rates
+        // if(mp_receiverrate_primary_.size()>linearwindow_asymmetry){
+        //   mp_receiverrate_primary_.pop_front();
+        // }
+        // if(mp_receiverrate_secondary_.size()>linearwindow_asymmetry){
+        //   mp_receiverrate_secondary_.pop_front();
+        // }
+        // mp_receiverrate_primary_.push_back((mpcollector_->MpGetPrimaryConnection()->stats().recv_bytes_second*8)/1000);
+        // mp_receiverrate_primary_avg=(std::accumulate(mp_receiverrate_primary_.begin(),mp_receiverrate_primary_.end(),0))/mp_receiverrate_primary_.size();
+        // mp_receiverrate_secondary_.push_back((mpcollector_->MpGetSecondaryConnection()->stats().recv_bytes_second*8)/1000); 
+        // mp_receiverrate_secondary_avg=(std::accumulate(mp_receiverrate_secondary_.begin(),mp_receiverrate_secondary_.end(),0))/mp_receiverrate_secondary_.size();
         if(int(packet->video_header.frame_type)!=3){
+          // RTC_LOG(LS_INFO)<<"sandyframe type: "<<int(packet->video_header.frame_type);
+          // gap=std::abs(double(sandy_end_time- sandy_start_time));//sandy: This is wrong computation of the gap, it should be difference between the last packet time in each path like below.
+          
           ifd=std::abs(double(sandy_end_time- sandy_previous_frame_time));
           assymetrypackets=0;
           if(primarypackettimes.size()>0 && secondarypackettimes.size()>0 && mpcollector_->MpGetRTT1()>0 && mpcollector_->MpGetRTT2()>0){
@@ -1003,186 +1008,223 @@ void RtpVideoStreamReceiver2::OnInsertedPacket(
             primarypathmintime=*min_element(std::begin(primarypackettimes), std::end(primarypackettimes));
             secondarypathmaxtime=*max_element(std::begin(secondarypackettimes), std::end(secondarypackettimes));
             secondarypathmintime= *min_element(std::begin(secondarypackettimes), std::end(secondarypackettimes));
-            delay_assymetry= secondarypathmaxtime-primarypathmaxtime;//sandy: This is called causing delay. If it is positive it means packets on slow path should be reduced else increased
-            gap=  secondarypathmintime-primarypathmaxtime;//sandy: This is called FCD or Frame Construction Delay.
-            gap=std::abs(gap);
-            if(delay_assymetry > 0 && !(asymmetric_feedback || asymmetric_feedback_positive) ){
-              if(increase_rate.size()>linearwindow_asymmetry){
-                increase_rate.pop_front();
-              }
-              increase_rate.push_back(delay_assymetry);
-              RTC_LOG(INFO)<<"sandyasymmetry gather delay increasing in positive direction and reduce packets on slow path";
-            }
-            else if(!(asymmetric_feedback||asymmetric_feedback_positive)){
-              if(decrease_rate.size()>linearwindow_asymmetry){
-                decrease_rate.pop_front();
-              }
-              decrease_rate.push_back(-1*delay_assymetry);
-              RTC_LOG(INFO)<<"sandyasymmetry gather delay increasing in negative direction and increase packets on slow path";
-            }
             if( firstpacketpath ==2 ){//sandy: secondary path is the slow path
-              if(delay_assymetry>0){//sandy: Asymmetry packets are growing in positive direction
-                for (size_t i=0;i<secondarypackettimes.size();i++) 
-                {
-                  if(secondarypackettimes[i]>primarypathmaxtime )
-                    assymetrypackets++;
-                } 
-                //sandy: Subtract the NACK packets as they are sent on correct path
-                assymetrypackets-=secondarynackpacket;
-              }//sandy: Because this asymmetry never exists
-              // else{
-              //   for (size_t i=0;i<primarypackettimes.size();i++) 
-              //   {
-              //     if(primarypackettimes[i]>secondarypathmaxtime )
-              //       assymetrypackets++;
-              //   } 
-              //   //sandy: Subtract the NACK packets as they are sent on correct path
-              //   assymetrypackets-=secondarynackpacket;
-              // }
-            }else {//sandy: Primary path is the slow path
-              if(delay_assymetry>0){
-                for (size_t i=0;i<primarypackettimes.size();i++) 
-                {
-                  if(primarypackettimes[i]>secondarypathmaxtime)
-                    assymetrypackets++;
-                }
-                assymetrypackets-=primarynackpacket; 
-              } //sandy: Because this asymmetry never exists
-              // else{
-              //   for (size_t i=0;i<secondarypackettimes.size();i++) 
-              //   {
-              //     if(secondarypackettimes[i]>primarypathmaxtime)
-              //       assymetrypackets++;
-              //   }
-              //   assymetrypackets-=primarynackpacket; 
-              // }            
+              // int64_t delay_on_primary=((1500*secondarypacket)/(mpcollector_->MpGetPrimaryConnection()->stats().recv_bytes_second*8)/1000)+mpcollector_->MpGetRTT1()/2+1;
+              gap=  secondarypathmintime-primarypathmaxtime;
+              if(gap>0){
+                RTC_LOG(INFO)<<"sandyasymmetry gather delay increasing in positive direction and reduce packets on slow path";
+              }
+              else{
+                RTC_LOG(INFO)<<"sandyasymmetry gather delay decreasing in negative direction and increase packets on slow path";
+              }
+              gap=std::abs(gap);
+              for (size_t i=0;i<secondarypackettimes.size();i++) 
+              {
+                if(secondarypackettimes[i]>primarypathmaxtime )
+                  assymetrypackets++;
+              } 
+              //sandy: Subtract the NACK packets as they are sent on correct path
+              assymetrypackets-=secondarynackpacket; 
+              if(assymetrypackets<0)
+                assymetrypackets=0;
+            }else {//sandy: Primary path is the best path
+              // int64_t delay_on_secondary=((1500*primarypacket)/(mpcollector_->MpGetPrimaryConnection()->stats().recv_bytes_second*8)/1000)+mpcollector_->MpGetRTT2()/2+1;
+              gap= primarypathmintime-secondarypathmaxtime;
+              if(gap>0){
+                RTC_LOG(INFO)<<"sandyasymmetry gather delay increasing in positive direction and reduce packets on slow path";
+              }
+              else{
+                RTC_LOG(INFO)<<"sandyasymmetry gather delay decreasing in negative direction and increase packets on slow path";
+              }
+              gap=std::abs(gap);
+              for (size_t i=0;i<primarypackettimes.size();i++) 
+              {
+                if(primarypackettimes[i]>secondarypathmaxtime)
+                  assymetrypackets++;
+              }
+              assymetrypackets-=primarynackpacket;
+              if(assymetrypackets<0)
+                assymetrypackets=0;
             }
-            if(assymetrypackets<0)
-              assymetrypackets=0;
           }else{
             gap=0;
-            assymetrypackets=0;
           }
-          mp_smoothed_timings_=0.9 * mp_smoothed_timings_ +
+          // int nack=max_nack_count;    
+          if(!sandy_time_window_trigger){
+            sandy_time_window_trigger=now_ms;
+          }
+          double gap_trend=0;
+          double ifd_trend=0;
+          float gap_avg=0;
+          float ifd_avg=0;
+          // float nack_avg=0;
+          
+          //Clear window at 100
+          if(frame_timings_.size() > linearwindow){
+            frame_timings_.pop_front();
+          }
+          if(frame_ifd_.size()>linearwindow){
+            frame_ifd_.pop_front();
+          }
+          if(mp_gaps_.size()>linearwindow){
+            mp_gaps_.erase(mp_gaps_.begin());
+          }
+          if(mp_ifd_.size()>linearwindow){
+            mp_ifd_.erase(mp_ifd_.begin());
+          }
+
+          if(gap>=0){
+            mp_gaps_.push_back(gap);
+            mp_smoothed_timings_=0.9 * mp_smoothed_timings_ +
                       0.1 * gap;
-          mp_smoothed_timings_ifd_=0.9 * mp_smoothed_timings_ifd_ +
+            // frame_timings_.emplace_back(double(arrival_time-mp_first_arrival_time_ms_),mp_smoothed_timings_);
+          }
+          
+          if(ifd>=0){
+            mp_smoothed_timings_ifd_=0.9 * mp_smoothed_timings_ifd_ +
                       0.1 * ifd;
+            mp_ifd_.push_back(ifd);
+            // frame_ifd_.emplace_back(double(arrival_time-mp_first_arrival_time_ms_),mp_smoothed_timings_ifd_);
+          }
+
+
+          // if(mp_gaps_.size()>0)
+          //   gap_avg=(std::accumulate(mp_gaps_.begin(),mp_gaps_.end(),0))/mp_gaps_.size();
+          // if(mp_ifd_.size()>0)
+          //   ifd_avg=(std::accumulate(mp_ifd_.begin(),mp_ifd_.end(),0))/mp_ifd_.size();
+          // if(mp_nack_.size()>0)
+          //   nack_avg=(std::accumulate(mp_nack_.begin(),mp_nack_.end(),0))/mp_nack_.size();
+
+
+          // if(nack>0){
+          //   mp_nack_.push_back(nack);
+          // }  
+          // if(frame_timings_.size()==linearwindow){
+          //     gap_trend = LinearFitSlope(frame_timings_);  
+          // }
+          // if(frame_ifd_.size()==linearwindow){
+          //   ifd_trend = LinearFitSlope(frame_ifd_);
+          // }
+
           if(assymetrypackets_avg_.size()>linearwindow_asymmetry){//sandy: Making 100 is too small and will not disable the path and asymetry average still
             assymetrypackets_avg_.pop_front();
           }
+          
           assymetrypackets_smooth_=0.9*assymetrypackets_smooth_+0.1*assymetrypackets;
           assymetrypackets_avg_.push_back(assymetrypackets);
-          assymetrypackets_avg=((std::accumulate(assymetrypackets_avg_.begin(),assymetrypackets_avg_.end(),0))/assymetrypackets_avg_.size());
-          
+          assymetrypackets_avg=(std::accumulate(assymetrypackets_avg_.begin(),assymetrypackets_avg_.end(),0))/assymetrypackets_avg_.size();
           //sandy: Below is the code for feedback mechanism
-          int rtt_diff=std::abs( (mpcollector_->MpGetRTT2()- mpcollector_->MpGetRTT1())/2);          
-          if(assymetrypackets_avg_.size()>linearwindow_asymmetry && !(asymmetric_feedback||asymmetric_feedback_positive )&& assymetrypackets_avg>0 && 
+          int rtt_diff=std::abs( (mpcollector_->MpGetRTT2()- mpcollector_->MpGetRTT1())/2);
+          if(assymetrypackets_avg_.size()>linearwindow_asymmetry && !asymmetric_feedback && assymetrypackets_avg>0 && 
             mp_smoothed_timings_ifd_ >((1000/remote_fps)+(3*mpcollector_->MpGetNumberOfCameraStreams())) && rtt_diff>10 && mpcollector_->MpGetRTT2()>0 && mpcollector_->MpGetRTT1()>0){
-            if(increase_rate.size()>0 && decrease_rate.size()>0){
-              increase_avg=(std::accumulate(increase_rate.begin(),increase_rate.end(),0))/increase_rate.size();
-              decrease_avg=(std::accumulate(decrease_rate.begin(),decrease_rate.end(),0))/decrease_rate.size();
-            }else{
-              increase_avg=0;
-              decrease_avg=0;
-            }
             //sandy: Record your RTT's
+            asymmetric_feedback=1;
             asymmetric_gd=mp_smoothed_timings_;
             if(rtt_diff>10)
               asymmetric_rttdiff=rtt_diff;
-            mpcollector_->MpSetAsymmetryPackets(assymetrypackets_avg+1);//sandy: Sending one additional hoping it will simply block the path
-            // rtp_rtcp_->SendAppAsymmetry();  
-            if(increase_avg<decrease_avg){
-              asymmetric_feedback_positive=1;
-              RTC_LOG(LS_INFO)<<"sandyasymmetry assymetrypackets negative"<<" IFD smooth "<< mp_smoothed_timings_ifd_ <<" gap "<< mp_smoothed_timings_ <<" RTT diff "<<asymmetric_rttdiff<< 
-              " Average assymetrypackets "<<assymetrypackets_avg<<" Increase rate "<<increase_avg<<" decreasing rate "<<decrease_avg<<" Time "<<(arrival_time-mp_first_arrival_time_ms_)/1000;
-            }else{
-              asymmetric_feedback=1;
-              RTC_LOG(LS_INFO)<<"sandyasymmetry assymetrypackets positive"<<" IFD smooth "<< mp_smoothed_timings_ifd_ <<" gap "<< mp_smoothed_timings_ <<" RTT diff "<<asymmetric_rttdiff<< 
-              " Average assymetrypackets "<<assymetrypackets_avg<<" Increase rate "<<increase_avg<<" decreasing rate "<<decrease_avg<<" Time "<<(arrival_time-mp_first_arrival_time_ms_)/1000;
-            }          
-          }else if((asymmetric_feedback ||asymmetric_feedback_positive) &&mp_smoothed_timings_ifd_ <=(1000/remote_fps) && mp_smoothed_timings_<asymmetric_gd && rtt_diff < asymmetric_rttdiff/2 ){
+            asymmetric_feedback_sent=assymetrypackets_avg+1;
+            mpcollector_->MpSetAsymmetryPackets(asymmetric_feedback_sent);//sandy: Sending one additional hoping it will simply block the path
+            mpcollector_->MpSetAsymmetryRR1(mp_receiverrate_primary_avg*mpcollector_->MpGetNumberOfCameraStreams());
+            mpcollector_->MpSetAsymmetryRR2(mp_receiverrate_secondary_avg*mpcollector_->MpGetNumberOfCameraStreams());
+            RTC_LOG(LS_INFO)<<"sandyasymmetry RR assymetrypackets "<<(uint8_t)mpcollector_->MpGetAsymmetryPackets()<<" RR1 "<< 
+            mpcollector_->MpGetAsymmetryRR1()<<" RR2 "<<mpcollector_->MpGetAsymmetryRR2()<<" IFD smooth "<< mp_smoothed_timings_ifd_ <<" gap "<< mp_smoothed_timings_ <<" RTT diff "<<asymmetric_rttdiff<< 
+            " Average assymetrypackets "<<assymetrypackets_avg+1;
+            // rtp_rtcp_->SendAppRR1();
+            // rtp_rtcp_->SendAppRR2();
+            rtp_rtcp_->SendAppAsymmetry();            
+          }else if(assymetrypackets_avg>0 && asymmetric_feedback && rtt_diff >= asymmetric_rttdiff && mp_smoothed_timings_> asymmetric_gd){
+            asymmetric_feedback_sent+=assymetrypackets_avg;
+            mpcollector_->MpSetAsymmetryPackets(asymmetric_feedback_sent);
+            rtp_rtcp_->SendAppAsymmetry();
+            RTC_LOG(LS_INFO)<<"sandyasymmetry RR assymetrypackets "<<(uint8_t)mpcollector_->MpGetAsymmetryPackets()<<" RR1 "<< 
+            mpcollector_->MpGetAsymmetryRR1()<<" RR2 "<<mpcollector_->MpGetAsymmetryRR2()<<" IFD smooth "<< mp_smoothed_timings_ifd_ <<" gap "<< mp_smoothed_timings_ <<" RTT diff "<<asymmetric_rttdiff<< 
+            " Average assymetrypackets "<<assymetrypackets_avg;
+          }
+          else if(asymmetric_feedback &&mp_smoothed_timings_ifd_ <=(1000/remote_fps) && mp_smoothed_timings_<asymmetric_gd && rtt_diff < asymmetric_rttdiff ){
             //Sandy: The asymetry average has become zero and hence stop controlling the feedback
+            asymmetric_feedback_sent=0;
             asymmetric_feedback=0;
-            asymmetric_feedback_positive=0;
             asymmetric_rttdiff=10000;
-            // increase_rate.clear();
-            // decrease_rate.clear();
             mpcollector_->MpSetAsymmetryPackets(0);
-            // rtp_rtcp_->SendAppAsymmetry();  
-            RTC_LOG(LS_INFO)<<"sandyasymmetry assymetrypackets disable feedback assymetrypackets  IFD smooth "<< mp_smoothed_timings_ifd_ <<" gap "<< gap <<" RTT diff "<<rtt_diff<<" Time "<<(arrival_time-mp_first_arrival_time_ms_)/1000;
-          }else if(asymmetric_feedback ||asymmetric_feedback_positive){
-            mpcollector_->MpSetAsymmetryPackets(mpcollector_->MpGetAsymmetryPackets()+assymetrypackets_avg+1);
-            // rtp_rtcp_->SendAppAsymmetry();
-            if(asymmetric_feedback_positive){
-              RTC_LOG(LS_INFO)<<"sandyasymmetry assymetrypackets negative"<<" IFD smooth "<< mp_smoothed_timings_ifd_ <<" gap "<< mp_smoothed_timings_ <<" RTT diff "<<asymmetric_rttdiff<< 
-            " Average assymetrypackets "<<mpcollector_->MpGetAsymmetryPackets()<<" Increase rate "<<increase_avg<<" decreasing rate "<<decrease_avg<<" Time "<<(arrival_time-mp_first_arrival_time_ms_)/1000;
-            }else{
-              RTC_LOG(LS_INFO)<<"sandyasymmetry assymetrypackets positive"<<" IFD smooth "<< mp_smoothed_timings_ifd_ <<" gap "<< mp_smoothed_timings_ <<" RTT diff "<<asymmetric_rttdiff<< 
-            " Average assymetrypackets "<<mpcollector_->MpGetAsymmetryPackets()<<" Increase rate "<<increase_avg<<" decreasing rate "<<decrease_avg<<" Time "<<(arrival_time-mp_first_arrival_time_ms_)/1000;
-            }
+            mpcollector_->MpSetAsymmetryRR1(0);
+            mpcollector_->MpSetAsymmetryRR2(0);
+            // rtp_rtcp_->SendAppRR1();
+            // rtp_rtcp_->SendAppRR2();
+            rtp_rtcp_->SendAppAsymmetry();  
+            RTC_LOG(LS_INFO)<<"sandyasymmetry RR disable feedback assymetrypackets "<<(uint8_t)mpcollector_->MpGetAsymmetryPackets()<<" RR1 "<< 
+            mpcollector_->MpGetAsymmetryRR1()<<" RR2 "<<mpcollector_->MpGetAsymmetryRR2()<<" IFD smooth "<< mp_smoothed_timings_ifd_ <<" gap "<< gap <<" RTT diff "<<rtt_diff;
           }
 
           RTC_LOG(LS_INFO)<<" sandyofo "<<(arrival_time-mp_first_arrival_time_ms_)/1000<<" Gather Delay "<<gap<<" Gather Delay smooth "<<mp_smoothed_timings_ 
-          <<" IFD Delay "<<ifd<<" IFD Delay smooth "<<mp_smoothed_timings_ifd_<<" Expected IFD "<<1000/remote_fps<<" Sender side Frame Rate "<<remote_fps<< 
-          " RTP packets count "<<packets_count<<" Frame count "<<sandy_frame_count<<" RTT1 "<<mpcollector_->MpGetRTT1()<<" RTT2 "<<mpcollector_->MpGetRTT2()<< 
-          " primarypacket "<<primarypacket<<" secondarypacket "<<secondarypacket<<" Loss1 "<<primaryloss<<" Loss2 "<<secondaryloss<<" primary NACK "<<primarynackpacket<< 
-          " secondary NACK "<<secondarynackpacket << " assymetrypackets "<<assymetrypackets<<" assymetrypackets Smooth "<<assymetrypackets_smooth_<< 
-          " Assymetry Avg packets "<<assymetrypackets_avg<<" Loss 1"<<mpcollector_->MpGetLoss1()<<" Loss2 "<<mpcollector_->MpGetLoss2()<< 
-          " Increase rate "<<increase_avg<<" decreasing rate "<<decrease_avg;
-          sandy_previous_frame_time=sandy_end_time;
-          primarypackettimes.clear();
-          secondarypackettimes.clear();
-          assymetrypackets=0;
-          sandy_end_time=0;
-          sandy_start_time=0;
-          packets_count=0;
-          primarypacket=0;
-          secondarypacket=0;
-          primarynackpacket=0;
-          secondarynackpacket=0;
-          firstpacketpath=0;
-          primaryloss=0;
-          secondaryloss=0;
-          assymetrypackets_avg=0;
-          gap=0;
-          ifd=0;
+        <<" Gather Delay Average "<<gap_avg<<" IFD Delay "<<ifd<<" IFD Delay smooth "<<mp_smoothed_timings_ifd_<<" IFD Average "<<ifd_avg<< 
+        " Expected IFD "<<1000/remote_fps<<" Sender side Frame Rate "<<remote_fps<<   
+        " Gather slop "<<gap_trend<<" IFD slope "<<ifd_trend<<" RTP packets count "<<packets_count<<" Frame count "<<sandy_frame_count<< 
+        " RTT1 "<<mpcollector_->MpGetRTT1()<<" RTT2 "<<mpcollector_->MpGetRTT2()<<" primarypacket "<<primarypacket<<" secondarypacket "<<secondarypacket<< 
+        " Loss1 "<<primaryloss<<" Loss2 "<<secondaryloss<<" primary NACK "<<primarynackpacket<<" secondary NACK "<<secondarynackpacket << " assymetrypackets "<<assymetrypackets<< 
+        " assymetrypackets Smooth "<<assymetrypackets_smooth_<<" Assymetry Avg packets "<<assymetrypackets_avg<< 
+         " Primary receiver rate "<<(mpcollector_->MpGetPrimaryConnection()->stats().recv_bytes_second*8)/1000<<" Kbps "<< 
+         " Secondry receiver rate "<<(mpcollector_->MpGetSecondaryConnection()->stats().recv_bytes_second*8)/1000<<" Kbps "<<  
+         " Primary receiver rate smooth "<<mp_receiverrate_primary_avg<<" Secondry receiver rate smooth "<<mp_receiverrate_secondary_avg<< 
+         " Primary capacity rate"<< mpcollector_->MpGetSendingRate1()/1000<<" Kbps "<< " secondary capacity rate"<< mpcollector_->MpGetSendingRate2()/1000<<" Kbps "<< 
+         " Loss 1"<<mpcollector_->MpGetLoss1()<<" Loss2 "<<mpcollector_->MpGetLoss2();
+        sandy_previous_frame_time=sandy_end_time;
+          if(mp_smoothed_timings_ifd_>35 && mp_smoothed_timings_>50 && gap_trend >0.001 && ifd_trend > 0.001){
+            if(!half_signal_sent_time){
+              half_signal_sent_time=now_ms;
+              half_signal_sent_count=0;
+            }
+            if(!sandy_signal_frame_count)
+              sandy_signal_frame_count=sandy_frame_count;
+            half_signal_sent_count++;
+            if(sandy_frame_count- sandy_signal_frame_count==2 && half_signal_sent_count>=3){
+              RTC_LOG(INFO)<<"sandyofo send the signal by full "<<(now_ms- start_signaling_time)<<" Frame count "<<sandy_frame_count;
+              half_signal_sent_time=0;
+              half_signal_sent_count=0;
+              sandy_signal_frame_count=0;
+            }
+            if(half_signal_sent_count>=3){
+              if(now_ms-half_signal_sent_time<=100){
+                RTC_LOG(INFO)<<"sandyofo send the signal by full "<<(now_ms- start_signaling_time)<<" Frame count "<<sandy_frame_count;
+              }
+              half_signal_sent_time=0;
+              half_signal_sent_count=0;
+              sandy_signal_frame_count=0; 
+            }
+            // rtp_rtcp_->SendAppRequestHalf();
+            RTC_LOG(INFO)<<"sandyofo send the signal by half "<<(now_ms- start_signaling_time)<<"Frame count"<<sandy_frame_count;         
+          }
+
         }else{
-          RTC_LOG(LS_INFO)<<" sandyofokeyframe "<<(arrival_time-mp_first_arrival_time_ms_)/1000<<" Gather Delay "<<gap<<" Gather Delay smooth "<<mp_smoothed_timings_ 
-          <<" IFD Delay "<<ifd<<" IFD Delay smooth "<<mp_smoothed_timings_ifd_<<" Expected IFD "<<1000/remote_fps<<" Sender side Frame Rate "<<remote_fps<< 
-          " RTP packets count "<<packets_count<<" Frame count "<<sandy_frame_count<<" RTT1 "<<mpcollector_->MpGetRTT1()<<" RTT2 "<<mpcollector_->MpGetRTT2()<< 
-          " primarypacket "<<primarypacket<<" secondarypacket "<<secondarypacket<<" Loss1 "<<primaryloss<<" Loss2 "<<secondaryloss<<" primary NACK "<<primarynackpacket<< 
-          " secondary NACK "<<secondarynackpacket << " assymetrypackets "<<assymetrypackets<<" assymetrypackets Smooth "<<assymetrypackets_smooth_<< 
-          " Assymetry Avg packets "<<assymetrypackets_avg<<" Loss 1"<<mpcollector_->MpGetLoss1()<<" Loss2 "<<mpcollector_->MpGetLoss2()<< 
-          " Increase rate "<<increase_avg<<" decreasing rate "<<decrease_avg;
           sandy_frame_count--;
         }
       }        
     }
     packets_count++;
   }
-  
+  mp_receiverrate_primary_avg=0;
+  mp_receiverrate_secondary_avg=0;
+  primarypackettimes.clear();
+  secondarypackettimes.clear();
+  assymetrypackets=0;
+  sandy_end_time=0;
+  sandy_start_time=0;
+  packets_count=0;
+  primarypacket=0;
+  secondarypacket=0;
+  primarynackpacket=0;
+  secondarynackpacket=0;
+  firstpacketpath=0;
+  primaryloss=0;
+  secondaryloss=0;
+  assymetrypackets_avg=0;
+  gap=0;
+  ifd=0;
 
   RTC_DCHECK(frame_boundary);
   
   if (result.buffer_cleared) {  
-    int rtt_diff=std::abs( (mpcollector_->MpGetRTT2()- mpcollector_->MpGetRTT1())/2);
-    if(rtt_diff>0 && mp_smoothed_timings_>0 ){
-      asymmetric_rttdiff=rtt_diff;
-      asymmetric_feedback=1;
-      asymmetric_gd=mp_smoothed_timings_;
-      mpcollector_->MpSetAsymmetryPackets(100);//sandy: Setting very high value such that path is disabled
-      // rtp_rtcp_->SendAppAsymmetry();
-      RTC_LOG(LS_INFO)<<" sandyofo requesting key frame "<<(arrival_time-mp_first_arrival_time_ms_)/1000<<" Gather requestkeyframe "<<gap<<" Gather Delayrequest smooth "<<mp_smoothed_timings_ 
-          <<" IFD Delay "<<ifd<<" IFD Delay smooth "<<mp_smoothed_timings_ifd_<<" Expected IFD "<<1000/remote_fps<<" Sender side Frame Rate "<<remote_fps<< 
-          " RTP packets count "<<packets_count<<" Frame count "<<sandy_frame_count<<" RTT1 "<<mpcollector_->MpGetRTT1()<<" RTT2 "<<mpcollector_->MpGetRTT2()<< 
-          " primarypacket "<<primarypacket<<" secondarypacket "<<secondarypacket<<" Loss1 "<<primaryloss<<" Loss2 "<<secondaryloss<<" primary NACK "<<primarynackpacket<< 
-          " secondary NACK "<<secondarynackpacket << " assymetrypackets "<<assymetrypackets<<" assymetrypackets Smooth "<<assymetrypackets_smooth_<< 
-          " Assymetry Avg packets "<<assymetrypackets_avg<<" Loss 1"<<mpcollector_->MpGetLoss1()<<" Loss2 "<<mpcollector_->MpGetLoss2()<< 
-          " Increase rate "<<increase_avg<<" decreasing rate "<<decrease_avg;
-    }
-    RTC_LOG(INFO)<<"sandyofo the OFO increasing and buffer is full ";
-    RequestKeyFrame();
-    
+      RTC_LOG(INFO)<<"sandyofo the OFO increasing and buffer is full ";
+      RequestKeyFrame();
   }
 }
 

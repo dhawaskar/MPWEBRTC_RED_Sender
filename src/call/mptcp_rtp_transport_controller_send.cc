@@ -812,104 +812,21 @@ int RtpTransportControllerSend::MpFindBestPath(int64_t rtt1,int64_t rtt2,double 
   mpcollector_->MpSetLoss1(loss1);
   mpcollector_->MpSetLoss2(loss2);
 
-  //sandy: If the rtt is too long then that path should be blocked
-  // if(rtt1>3000 || rtt2>3000){
-  //    RTC_DLOG(LS_ERROR)<<"sandyofo sender itself blocking the path by setting full signal";
-  //    mpcollector_->MpSetFullSignal();
-  // }
-
-  double P1time=0;
-  double P2time=0;
   int bestpath=0;
 
   if(rtt1==0 && rtt2==0){
     return 1;
   }
   
-  rate1/=1000;
-  rate2/=1000;
-  //sandy: Find the completion time
-  P1time= (double(1/rate1))+double(rtt1/2);
-  P2time= (double(1/rate2))+double(rtt2/2);
-  mpcollector_->MpSetLossBasedPathId(0);
-  if(P1time<=P2time)
+  if(rtt1<rtt2)
     bestpath=1;
   else
     bestpath=2;
-
-
-  // if(std::abs(rtt1-rtt2)<50 && (loss1>=0.25 || loss2>=0.25) ){
-  //   if(loss1>=0.25 && loss1>loss2){
-  //     bestpath=2;
-  //     mpcollector_->MpSetLossBasedPathId(bestpath);
-  //   }else if(loss2>=0.25 && loss2>loss1){
-  //     bestpath=1;
-  //     mpcollector_->MpSetLossBasedPathId(bestpath);
-  //   }
-  // }else{
-  // if(rtt1<100 && rtt2 <100){
-  if(loss1>=0.1 && loss2>=0.1){
-    if(loss1>loss2){
-      bestpath=2;
-      mpcollector_->MpSetLossBasedPathId(bestpath);
-    }
-    else{
-      bestpath=1;
-      mpcollector_->MpSetLossBasedPathId(bestpath);
-    }
-  }else if(loss1>=.1 && loss1>loss2){
-    bestpath=2;
-    mpcollector_->MpSetLossBasedPathId(bestpath);
-  }else if(loss2>=0.1 && loss2>loss1){
-    bestpath=1;
-    mpcollector_->MpSetLossBasedPathId(bestpath);
-  }
-  // }
-  // }
-
-
-  //sandy: If the loss is small and rtt difference is small then choose the path with highest bitrate as best
-  if((std::abs(rate1-rate2)>=(0.75*(std::max(rate1,rate2))) && std::abs(rtt1-rtt2)<25)|| 
-    ((std::abs(rate1-rate2)>=(0.75*(std::max(rate1,rate2)))) && loss1<0.1 && loss2<0.1 && std::abs(rtt1-rtt2)<25)|| 
-    (std::abs(rate1-rate2)>=(0.75*(std::max(rate1,rate2))) && loss1<=0.0 && loss2<=0.0 && std::abs(rtt1-rtt2)<50)){
-  // if(loss1<0.15 && loss2 <0.15 && std::abs(rtt1-rtt2)<25){ //&& std::abs(rate1-rate2)>=95*(std::max(rate1,rate2))/10){
-    if(rate1>rate2)
-      bestpath=1;
-    else
-      bestpath=2;
-  }
-  RTC_LOG(INFO)<<"sandyratio: bestpath= "<<bestpath<<" C1 time= "<<P1time<<" c2 time= "<<P2time;
-  //sandy: Check if there is Halfsignaled RTT set and if check if RTT has reduced and if then clear the half signal
-  if(rtt1>0 && mpcollector_->MpGetHalfSignal()<1.0 && mpcollector_->MpGetHalfSignaledPathId()==1 && 
-    (rtt1<=mpcollector_->MpGetHalfSignaledRtt()/4)){//&&  rtt1<100 
-    if(mpcollector_->MpGetHalfSignalLoss()!=0 && mpcollector_->MpGetLoss1()<mpcollector_->MpGetHalfSignalLoss()){//sandy: If the loss is also set
-      RTC_LOG(LS_INFO)<<"sandyofo clearing the half signal set on path 1 old RTT:"<<mpcollector_->MpGetHalfSignaledRtt() 
-      <<" new RTT: "<<rtt1<<" old loss: "<<mpcollector_->MpGetHalfSignalLoss()<<" new loss "<<mpcollector_->MpGetLoss1();
-      mpcollector_->MpClearHalfSignal();
-    }else{
-      RTC_LOG(LS_INFO)<<"sandyofo clearing the half signal set on path 1 old RTT:" 
-      <<mpcollector_->MpGetHalfSignaledRtt()<<" new RTT: "<<rtt1;
-      mpcollector_->MpClearHalfSignal();
-    }
-  }else if(rtt2>0 && mpcollector_->MpGetHalfSignal()<1.0 && mpcollector_->MpGetHalfSignaledPathId()==2 && 
-    (rtt2<=mpcollector_->MpGetHalfSignaledRtt()/4)){ //&&   rtt2<100 
-    if(mpcollector_->MpGetHalfSignalLoss()!=0 && mpcollector_->MpGetLoss2()<mpcollector_->MpGetHalfSignalLoss()){//sandy: If the loss is also set
-      RTC_LOG(LS_INFO)<<"sandyofo clearing the half signal set on path 2 old RTT:"<<mpcollector_->MpGetHalfSignaledRtt() 
-      <<" new RTT: "<<rtt2<<" old loss: "<<mpcollector_->MpGetHalfSignalLoss()<<" new loss "<<mpcollector_->MpGetLoss2();
-      mpcollector_->MpClearHalfSignal();
-    }else{
-      RTC_LOG(LS_INFO)<<"sandyofo clearing the half signal set on path 2 old RTT:"
-      <<mpcollector_->MpGetHalfSignaledRtt()<<" new RTT: "<<rtt2;
-      mpcollector_->MpClearHalfSignal();
-    }
-  }
   return bestpath;
 }
 
 void RtpTransportControllerSend::MpFindRatio(int64_t rtt1,int64_t rtt2,int64_t rate1,int64_t rate2,int pathid){
   double mpratio;
-  
-  
   if(pathid==1)
     mpratio=double(double (rate1)/double(rate2));
   else
@@ -917,7 +834,6 @@ void RtpTransportControllerSend::MpFindRatio(int64_t rtt1,int64_t rtt2,int64_t r
   if(rtt1==0 && rtt2==0){
     mpratio=0;
   }
-
   RTC_LOG(INFO)<<"sandyratio: the scheduler ratio= "<<mpratio<<" P1 Rate "<<rate1<<" bps "<<" P2 Rate "<<rate2<<" bps "<<" RTT1 "<<rtt1<<" ms "<<" RTT2 "<<rtt2<<" ms ";
   mpcollector_->MpSetRatio(mpratio);
 }

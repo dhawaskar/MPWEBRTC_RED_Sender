@@ -202,6 +202,8 @@ class RtpVideoStreamReceiver2 : public LossNotificationSender,
   double mp_accumulated_timings_=0.0;
   double mp_smoothed_timings_=0.0;
   double mp_smoothed_timings_ifd_=0.0;
+  std::deque<double> mp_receiverrate_primary_;
+  std::deque<double> mp_receiverrate_secondary_;
   double mp_first_arrival_time_ms_=-1;
   double signaled_gap_=0.0;
   double signaled_ifd_=0.0;
@@ -210,6 +212,11 @@ class RtpVideoStreamReceiver2 : public LossNotificationSender,
   int64_t last_update_ms_=-1;
   double threshold_=12.5;
   int64_t key_frame_interval=300,last_key_frame_time=0;
+  
+  int asymmetric_gd=0;
+  int asymmetric_rttdiff=10000;
+
+
  private:
   // Implements RtpVideoFrameReceiver.
   void ManageFrame(
@@ -278,6 +285,8 @@ class RtpVideoStreamReceiver2 : public LossNotificationSender,
 
     absl::optional<LossNotificationState> lntf_state_
         RTC_GUARDED_BY(worker_task_checker_);
+
+
   };
   enum ParseGenericDependenciesResult {
     kDropPacket,
@@ -394,7 +403,48 @@ class RtpVideoStreamReceiver2 : public LossNotificationSender,
   rtc::scoped_refptr<RtpVideoStreamReceiverFrameTransformerDelegate>
       frame_transformer_delegate_;
 
-
+  int64_t sandy_start_time 
+  RTC_GUARDED_BY(worker_task_checker_);
+  std::vector <int64_t> primarypackettimes RTC_GUARDED_BY(worker_task_checker_);
+  std::vector <int64_t> secondarypackettimes RTC_GUARDED_BY(worker_task_checker_);
+  int64_t sandy_end_time RTC_GUARDED_BY(worker_task_checker_);
+int64_t sandy_previous_frame_time RTC_GUARDED_BY(worker_task_checker_);
+int64_t sandy_time_window RTC_GUARDED_BY(worker_task_checker_);
+int64_t sandy_time_window_trigger RTC_GUARDED_BY(worker_task_checker_);
+int64_t sandy_frame_count RTC_GUARDED_BY(worker_task_checker_);
+int64_t sandy_signal_frame_count RTC_GUARDED_BY(worker_task_checker_);
+int64_t half_signal_sent_time RTC_GUARDED_BY(worker_task_checker_);
+int64_t half_signal_sent_count RTC_GUARDED_BY(worker_task_checker_);
+int64_t start_signaling_time RTC_GUARDED_BY(worker_task_checker_);
+int64_t packets_count RTC_GUARDED_BY(worker_task_checker_)=1;
+int mp_print_count RTC_GUARDED_BY(worker_task_checker_);
+int64_t primarypathmaxtime RTC_GUARDED_BY(worker_task_checker_);
+int64_t primarypathmintime RTC_GUARDED_BY(worker_task_checker_);
+int64_t secondarypathmaxtime RTC_GUARDED_BY(worker_task_checker_);
+int64_t secondarypathmintime RTC_GUARDED_BY(worker_task_checker_);
+int64_t gap RTC_GUARDED_BY(worker_task_checker_);
+int64_t delay_assymetry RTC_GUARDED_BY(worker_task_checker_);
+int primarypacket RTC_GUARDED_BY(worker_task_checker_)=0;
+int secondarypacket RTC_GUARDED_BY(worker_task_checker_)=0;
+  
+  int assymetrypackets RTC_GUARDED_BY(worker_task_checker_);
+  int primarynackpacket RTC_GUARDED_BY(worker_task_checker_);
+  int secondarynackpacket RTC_GUARDED_BY(worker_task_checker_);
+  int firstpacketpath RTC_GUARDED_BY(worker_task_checker_);
+  double primaryloss RTC_GUARDED_BY(worker_task_checker_);
+  double secondaryloss RTC_GUARDED_BY(worker_task_checker_);
+  double ifd RTC_GUARDED_BY(worker_task_checker_);
+  int assymetrypackets_smooth_ RTC_GUARDED_BY(worker_task_checker_);
+  int assymetrypackets_avg RTC_GUARDED_BY(worker_task_checker_);
+  double mp_receiverrate_primary_avg RTC_GUARDED_BY(worker_task_checker_);
+  double mp_receiverrate_secondary_avg RTC_GUARDED_BY(worker_task_checker_);
+  std::deque<int> assymetrypackets_avg_ RTC_GUARDED_BY(worker_task_checker_);
+  int asymmetric_feedback RTC_GUARDED_BY(worker_task_checker_)=0;
+  int asymmetric_feedback_positive RTC_GUARDED_BY(worker_task_checker_)=0;
+  std::deque <int> increase_rate RTC_GUARDED_BY(worker_task_checker_);
+  std::deque <int> decrease_rate RTC_GUARDED_BY(worker_task_checker_);
+  int64_t increase_avg RTC_GUARDED_BY(worker_task_checker_) =0;
+  int64_t decrease_avg RTC_GUARDED_BY(worker_task_checker_) =0;
 };
 
 }  // namespace webrtc

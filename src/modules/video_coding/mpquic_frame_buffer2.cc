@@ -691,6 +691,14 @@ void FrameBuffer::UpdateJitterDelay() {
   }
   RTC_LOG(INFO)<<"sandyofo Timings: Jitter Delay "<<jitter_buffer_ms<<" Current Delay: "<<current_delay_ms<<" Target Delay: "<<target_delay_ms<< 
   " RTT1: "<<mpcollector_->MpGetRTT1()<<" RTT2: "<<mpcollector_->MpGetRTT2();
+  int max_rtt=std::max(mpcollector_->MpGetRTT1(),mpcollector_->MpGetRTT2());
+  if(jitter_buffer_ms>max_rtt){
+    rtp_rtcp_->SendAppQUIC();
+    mpcollector_->MpSetQUICSignalSent();
+  }else if(MpGetQUICSignalSent()){
+    mpcollector_->MpClearQUICSignalSent();
+    rtp_rtcp_->SendAppQUIC();
+  }
 }
 
 void FrameBuffer::UpdateTimingFrameInfo() {

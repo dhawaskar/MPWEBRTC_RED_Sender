@@ -817,12 +817,6 @@ int RtpTransportControllerSend::MpFindBestPath(int64_t rtt1,int64_t rtt2,double 
   loss1=mpcollector_->MpGetLoss1();
   loss2=mpcollector_->MpGetLoss2();
 
-  //sandy: If the rtt is too long then that path should be blocked
-  // if(rtt1>3000 || rtt2>3000){
-  //    RTC_DLOG(LS_ERROR)<<"sandyofo sender itself blocking the path by setting full signal";
-  //    mpcollector_->MpSetFullSignal();
-  // }
-
   double P1time=0;
   double P2time=0;
   int bestpath=0;
@@ -843,16 +837,7 @@ int RtpTransportControllerSend::MpFindBestPath(int64_t rtt1,int64_t rtt2,double 
     bestpath=2;
 
 
-  // if(std::abs(rtt1-rtt2)<50 && (loss1>=0.25 || loss2>=0.25) ){
-  //   if(loss1>=0.25 && loss1>loss2){
-  //     bestpath=2;
-  //     mpcollector_->MpSetLossBasedPathId(bestpath);
-  //   }else if(loss2>=0.25 && loss2>loss1){
-  //     bestpath=1;
-  //     mpcollector_->MpSetLossBasedPathId(bestpath);
-  //   }
-  // }else{
-  // if(rtt1<100 && rtt2 <100){
+  
   if(loss1>=0.1 && loss2>=0.1){
     if(loss1>loss2){
       bestpath=2;
@@ -869,8 +854,7 @@ int RtpTransportControllerSend::MpFindBestPath(int64_t rtt1,int64_t rtt2,double 
     bestpath=1;
     mpcollector_->MpSetLossBasedPathId(bestpath);
   }
-  // }
-  // }
+  
 
 
   //sandy: If the loss is small and rtt difference is small then choose the path with highest bitrate as best

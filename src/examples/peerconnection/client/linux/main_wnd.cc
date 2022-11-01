@@ -578,6 +578,6 @@ void GtkMainWnd::VideoRenderer::OnFrame(const webrtc::VideoFrame& video_frame) {
                      buffer->height());
 
   gdk_threads_leave();
-  RTC_LOG(INFO)<<"sandycamera the stream id of frame: "<<video_frame.stream_id; 
+  //RTC_LOG(INFO)<<"sandycamera the stream id of frame: "<<video_frame.stream_id; 
   g_idle_add(Redraw, main_wnd_);
 }

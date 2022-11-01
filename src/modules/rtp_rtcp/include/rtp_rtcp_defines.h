@@ -105,7 +105,12 @@ enum RTCPPacketType : uint32_t {
   kRtcpXrDlrrReportBlock = 0x80000,
   kRtcpTransportFeedback = 0x100000,
   kRtcpXrTargetBitrate = 0x200000,
-  kAppSubtypeMpFull = 0x1000000
+  kAppSubtypeMpFull = 0x1000000,
+  kAppSubtypeQUIC=0x2000000,
+  kAppSubtypeMPFrameRate=0x3000000,
+  kAppSubtypeMpAsymmetry=0x4000000,
+  kAppSubtypeMpRR1=0x5000000,
+  kAppSubtypeMpRR2=0x6000000,
 };
 
 enum RtxMode {
@@ -229,13 +234,14 @@ class RtcpBandwidthObserver {
 };
 
 // NOTE! |kNumMediaTypes| must be kept in sync with RtpPacketMediaType!
-static constexpr size_t kNumMediaTypes = 5;
+static constexpr size_t kNumMediaTypes = 6;
 enum class RtpPacketMediaType : size_t {
   kAudio,                         // Audio media packets.
   kVideo,                         // Video media packets.
   kRetransmission,                // Retransmisions, sent as response to NACK.
   kForwardErrorCorrection,        // FEC packets.
   kPadding = kNumMediaTypes - 1,  // RTX or plain padding sent to maintain BWE.
+  kDupPacket = 4,//sandy:Maintain minimum telemetry
   // Again, don't forget to udate |kNumMediaTypes| if you add another value!
 };
 

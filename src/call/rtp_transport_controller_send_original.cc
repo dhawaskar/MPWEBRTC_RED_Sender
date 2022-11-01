@@ -811,6 +811,8 @@ int RtpTransportControllerSend::MpFindBestPath(int64_t rtt1,int64_t rtt2,double 
   mpcollector_->MpSetRTT2(rtt2);
   mpcollector_->MpSetLoss1(loss1);
   mpcollector_->MpSetLoss2(loss2);
+  mpcollector_->MpSetSendingRate1(rate1);
+  mpcollector_->MpSetSendingRate2(rate2);
 
   //sandy: If the rtt is too long then that path should be blocked
   // if(rtt1>3000 || rtt2>3000){

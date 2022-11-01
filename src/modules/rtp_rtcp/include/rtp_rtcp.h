@@ -76,8 +76,13 @@ class RtpRtcp : public Module, public RtpRtcpInterface {
   void SendPictureLossIndication() { SendRTCP(kRtcpPli); }
   // using FIR, https://tools.ietf.org/html/rfc5104#section-4.3.1.2
   void SendFullIntraRequest() { SendRTCP(kRtcpFir); }
+  void SendAppQUIC(){SendRTCP(kAppSubtypeQUIC);}//sandy: Adding Application specific request
   void SendAppRequestHalf(){SendRTCP(kAppSubtypeMpHalf);}//sandy: Adding Application specific request
   void SendAppRequestFull(){SendRTCP(kAppSubtypeMpFull);}//sandy: Adding Application specific request
+  void SendAppMPFrameRate(){SendRTCP(kAppSubtypeMPFrameRate);}//sandy: Adding Application specific request
+  void SendAppAsymmetry(){SendRTCP(kAppSubtypeMpAsymmetry);}//sandy: Adding Application specific request
+  void SendAppRR1(){SendRTCP(kAppSubtypeMpRR1);}//sandy: Adding Application specific request
+  void SendAppRR2(){SendRTCP(kAppSubtypeMpRR2);}//sandy: Adding Application specific request
 };
 
 }  // namespace webrtc

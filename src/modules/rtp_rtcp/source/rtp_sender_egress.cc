@@ -380,6 +380,8 @@ std::vector<RtpSequenceNumberMap::Info> RtpSenderEgress::GetSentRtpPacketInfos(
 
 bool RtpSenderEgress::HasCorrectSsrc(const RtpPacketToSend& packet) const {
   switch (*packet.packet_type()) {
+    // Duplicate packets to maintain minimum telemetry for MpWebRTC.
+    case RtpPacketMediaType::kDupPacket:
     case RtpPacketMediaType::kAudio:
     case RtpPacketMediaType::kVideo:
       return packet.Ssrc() == ssrc_;

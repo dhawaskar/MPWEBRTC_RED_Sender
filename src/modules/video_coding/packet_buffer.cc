@@ -32,7 +32,8 @@
 #include "rtc_base/numerics/mod_ops.h"
 #include "system_wrappers/include/clock.h"
 #include "system_wrappers/include/field_trial.h"
-
+#include "api/mp_collector.h"
+#include "api/mp_global.h"
 namespace webrtc {
 namespace video_coding {
 
@@ -114,6 +115,7 @@ PacketBuffer::InsertResult PacketBuffer::InsertPacket(
       // Clear the buffer, delete payload, and return false to signal that a
       // new keyframe is needed.
       RTC_LOG(LS_WARNING) << "Clear PacketBuffer and request key frame.";
+      RTC_LOG(LS_INFO)<<" sandyofo requesting key frame"<<mpcollector_->MpGetAsymmetryPackets();
       ClearInternal();
       result.buffer_cleared = true;
       return result;

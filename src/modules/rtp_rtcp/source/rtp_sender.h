@@ -203,7 +203,7 @@ class RTPSender {
   RtpPacketHistory* const packet_history_p_;//sandy
   RtpPacketHistory* const packet_history_s_;//sandy
   RtpPacketSender* const paced_sender_;
-
+  int64_t sandy_sender_frame_count=0;
   rtc::CriticalSection send_critsect_;
 
   bool sending_media_ RTC_GUARDED_BY(send_critsect_);

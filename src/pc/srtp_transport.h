@@ -169,6 +169,7 @@ class SrtpTransport : public RtpTransport {
   int rtp_abs_sendtime_extn_id_ = -1;
 
   int decryption_failure_count_ = 0;
+  int original_payload_type=-1;
 };
 
 }  // namespace webrtc

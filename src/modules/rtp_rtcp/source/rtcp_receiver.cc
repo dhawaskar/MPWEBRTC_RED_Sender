@@ -866,6 +866,7 @@ void RTCPReceiver::HandleApp(const rtcp::CommonHeader& rtcp_block,
 
   rtcp::App app;
   static constexpr uint32_t Mpappname = rtcp::App::NameToInt("sand");
+ 
   if (app.Parse(rtcp_block)) {
     if (app.name() == rtcp::RemoteEstimate::kName &&
         app.sub_type() == rtcp::RemoteEstimate::kSubType) {
@@ -876,8 +877,7 @@ void RTCPReceiver::HandleApp(const rtcp::CommonHeader& rtcp_block,
       }
     }else if(app.sub_type()==1 && app.name()==Mpappname){
       // RTC_LOG(INFO)<<"sandyofo check you received APP specific messages name: "<<app.name()<<" subtype: "<<app.sub_type()<< 
-      // "data: "<<app.data()[0]<<" pathid "<< 
-      rtcp_block.pathid();
+      // "data: "<<app.data()[0]<<" pathid "<<rtcp_block.pathid();
 
       if(app.data()[0]=='a'){
         // RTC_LOG(INFO)<<rtc::TimeMillis()<<"sandyofo redcuce the traffic on slow path to one packet ";
@@ -887,7 +887,36 @@ void RTCPReceiver::HandleApp(const rtcp::CommonHeader& rtcp_block,
         // RTC_LOG(INFO)<<rtc::TimeMillis()<<"sandyofo redcuce the traffic on slow path by half ";
         mpcollector_->MpSetHalfSignal();
       }
+      if(app.data()[0]=='c'){
+        RTC_LOG(INFO)<<rtc::TimeMillis()<<"sandyofo received QUIC signal";
+        if(!mpcollector_->MpGetQUIC())
+          mpcollector_->MpSetQUIC();
+      }
       return;
+    }else if(app.sub_type()==2 && app.name()==Mpappname){
+     // RTC_LOG(INFO)<<"sandyframerate sender side fps: "<<int(app.data()[0]);
+     mpcollector_->MpSetRemoteFrameRate(int(app.data()[0]));
+     return;
+    }else if(app.sub_type()==3){
+      char asymmetrypackets[4];
+      std::memcpy(asymmetrypackets,app.data(),4);
+      mpcollector_->MpSetRemoteAsymmetryPackets(atoi(asymmetrypackets));
+      RTC_LOG(INFO)<<"sandyasymmetry received asymmetry packets "<<mpcollector_->MpGetRemoteAsymmetryPackets();
+     return;
+    }
+    else if(app.sub_type()==4){
+      char rate[4];
+      std::memcpy(rate,app.data(),4);
+      mpcollector_->MpSetRemoteAsymmetryRR1(atoi(rate));
+      // RTC_LOG(INFO)<<"sandyasymmetry RR1: "<<atoi(rate);
+     return;
+    }
+    else if(app.sub_type()==5){
+      char rate[4];
+      std::memcpy(rate,app.data(),4);
+      mpcollector_->MpSetRemoteAsymmetryRR2(atoi(rate));
+      // RTC_LOG(INFO)<<"sandyasymmetry RR2: "<<atoi(rate);
+     return;
     }
   }
   ++num_skipped_packets_;

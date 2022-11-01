@@ -25,8 +25,7 @@ Support file to collect information from webrtc
 #include "api/units/timestamp.h"
 #include "rtc_base/deprecation.h"
 #include <deque>
-
-
+#include <math.h>
 
 
 
@@ -61,17 +60,20 @@ public:
 		int bytes_received;
 
 	};
-
+	cricket::Connection* primary_connection_;
+	cricket::Connection* secondary_connection_;
 	std::deque<SandyCandidate> sandycandidates;	
 	std::deque<SandyConnection> sandyconnections;
 	long primary_congestion_wnd_= 0;
 	long secondary_congestion_wnd_= 0;
 	uint32_t fps_=0;
+	uint32_t remote_fps_=30;//sandy: Initial values is 30 such that in begining we do not send any signal
 	int MPWebRTC_enabled=0;
 	int MPSecond_path=0;   //Check if the second path is set
 	uint32_t primary_seq=0;//Sequence number of primary path with path id 1
 	uint32_t secondary_seq=0;//sequence numner of secondary path with path id 2
 	uint32_t total_packets_sent=0;//Total packets from the rtp_sender_egress
+	int numcamerastreams_=1;
 	int pathid=0;
 	int spath_lock_=0;
 	int ppath_lock_=0;
@@ -83,6 +85,10 @@ public:
 	std::string scheduler_="rr";
 	int rtt1_=0;
 	int rtt2_=0;
+	int remote_rr1_=0;
+	int remote_rr2_=0;
+	double sendingrate1_;
+	double sendingrate2_;
 	double loss1_=0;
 	double loss2_=0;
 	double alpha_=1.0;
@@ -92,6 +98,27 @@ public:
 	int halfsignaled_rtt_=0;
 	double halfsignaled_loss_=0;
 	int fullsignaled_rtt_=0;
+	int quic_=0;
+	int quic_sent_=0;
+	int remote_assymetry_=0;
+	int assymetry_=0;
+	int rr1_;
+	int rr2_;
+	int payload_type_=-1;
+	// int rr1_left_=0;
+	// int rr2_left_=0;
+	void MpSetPriamryConnection(cricket::Connection* conn){
+		primary_connection_=conn;
+	}
+	void MpSetSecondaryConnection(cricket::Connection* conn){
+		secondary_connection_=conn;
+	}
+	cricket::Connection* MpGetPrimaryConnection(){
+		return primary_connection_;
+	}
+	cricket::Connection* MpGetSecondaryConnection(){
+		return secondary_connection_;
+	}
 	void MpStoreCandidate (std::string ip, int port,uint32_t priority,std::string transport_name, 
 		uint16_t network_id,uint16_t network_cost,std::string protocol) ;
 	void MpPrintCandidates() const;
@@ -146,6 +173,18 @@ public:
 	std::string MpGetScheduler(){
 		return scheduler_;
 	}
+	void MpSetPayloadType(int payload_type){
+		payload_type_=payload_type;
+	}
+	int MpGetPayloadType(){
+		return payload_type_;
+	}
+	void MpSetNumberOfCameraStreams(int numcamerastreams){
+		numcamerastreams_=numcamerastreams;
+	}
+	int MpGetNumberOfCameraStreams(){
+		return numcamerastreams_;
+	}
 	long MpGetPrimaryWindow(){
 		return primary_congestion_wnd_;
 	}
@@ -179,6 +218,61 @@ public:
 		return fps_;
 	}
 
+	void MpSetRemoteFrameRate(uint32_t fps){
+		remote_fps_=fps;
+	}
+	uint32_t MpGetRemoteFrameRate(){
+		return remote_fps_;
+	}
+
+	void MpSetRemoteAsymmetryPackets(int assymetry){
+		remote_assymetry_=assymetry;
+	}
+	int MpGetRemoteAsymmetryPackets(){
+		return remote_assymetry_;
+	}
+	void MpSetAsymmetryPackets(int assymetry){
+		assymetry_=assymetry;
+	}
+	int MpGetAsymmetryPackets(){
+		return assymetry_;
+	}
+    void MpSetAsymmetryRR1(int rr1){
+    	rr1_=rr1;
+    	// rr1_left_=int(rr1-(rr1_*100));
+    }
+    void MpSetAsymmetryRR2(int rr2){
+    	rr2_=rr2;
+    	// rr2_left_=int(rr2-(rr2_*100));
+    }
+    int MpGetAsymmetryRR1(){
+    	return rr1_;
+    }
+    int MpGetAsymmetryRR2(){
+    	return rr2_;
+    }
+
+    void MpSetRemoteAsymmetryRR1(int rr1){
+    	remote_rr1_=rr1;
+    	// rr1_left_=int(rr1-(rr1_*100));
+    }
+    void MpSetRemoteAsymmetryRR2(int rr2){
+    	remote_rr2_=rr2;
+    	// rr2_left_=int(rr2-(rr2_*100));
+    }
+    int MpGetRemoteAsymmetryRR1(){
+    	return remote_rr1_;
+    }
+    int MpGetRemoteAsymmetryRR2(){
+    	return remote_rr2_;
+    }
+
+    // int MpGetAsymmetryRR1left(){
+    // 	return rr1_left_;
+    // }
+    // int MpGetAsymmetryRR2left(){
+    // 	return rr2_left_;
+    // }
 	//sandy  : Path properties
 	int MpGetRTT1(){//If MP-webRTC is enabled
 		return rtt1_;
@@ -189,6 +283,20 @@ public:
 	int MpGetRTT2(){//If MP-webRTC is enabled
 		return rtt2_;
 	}
+	void MpSetSendingRate1(double rate){ 
+		sendingrate1_=rate;
+	}
+	void MpSetSendingRate2(double rate){//If MP-webRTC is enabled
+		sendingrate2_=rate;
+	}
+
+	double MpGetSendingRate1(){ 
+		return sendingrate1_;
+	}
+	double MpGetSendingRate2(){//If MP-webRTC is enabled
+		return sendingrate2_;
+	}
+
 	void MpSetRTT2(int rtt2){ 
 		rtt2_=rtt2;
 	}
@@ -204,8 +312,30 @@ public:
 	void MpSetLoss2(double loss2){ 
 		loss2_=loss2;
 	}
+	//As receiver of signal
+	void MpSetQUIC(){
+		RTC_LOG(INFO)<<"sandyofo received QUIC signal";
+		quic_=1;
+	}
+	int MpGetQUIC(){
+		return quic_;
+	}
+	void MpClearQUIC(){
+		RTC_LOG(INFO)<<"sandyofo clearing QUIC signal";
+		quic_=0;
+	}
+	//As sender of the signal
+	int MpGetQUICSignalSent(){
+		return quic_sent_;
+	}
+	void MpSetQUICSignalSent(int signal){
+		quic_sent_=signal;
+	}
+	void MpClearQUICSignalSent(){
+		quic_sent_=0;
+	}
 	void MpSetHalfSignal(){
-		if(rtt2_<=10 || rtt1_<=10){
+		if(rtt2_<=50 && rtt1_<=50){
 			RTC_LOG(INFO)<<"sandyofo half signal are ignored as RTT are not setyet";
 			return;
 		}
@@ -235,7 +365,7 @@ public:
 			}
 			alpha_/=2;
 		}
-		else if(now-halfsignaltime>100){
+		else if(now!=halfsignaltime){
 			//sandy: If Half siganl is already set
 			if(alpha_<1.0){
 				if(halfsignaled_pathid_==1){

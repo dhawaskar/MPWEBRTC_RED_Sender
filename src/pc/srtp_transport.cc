@@ -121,59 +121,68 @@ RTCError SrtpTransport::SetSrtpReceiveKey(const cricket::CryptoParams& params) {
 bool SrtpTransport::SendRtpPacket(rtc::CopyOnWriteBuffer* packet,
                                   const rtc::PacketOptions& options,
                                   int flags) {
-  if (!IsSrtpActive()) {
-    RTC_LOG(LS_ERROR)
-        << "Failed to send the packet because SRTP transport is inactive.";
-    return false;
-  }
-  rtc::PacketOptions updated_options = options;
-  TRACE_EVENT0("webrtc", "SRTP Encode");
-  bool res;
-  uint8_t* data = packet->data();
-  int len = rtc::checked_cast<int>(packet->size());
-// If ENABLE_EXTERNAL_AUTH flag is on then packet authentication is not done
-// inside libsrtp for a RTP packet. A external HMAC module will be writing
-// a fake HMAC value. This is ONLY done for a RTP packet.
-// Socket layer will update rtp sendtime extension header if present in
-// packet with current time before updating the HMAC.
-#if !defined(ENABLE_EXTERNAL_AUTH)
-  res = ProtectRtp(data, len, static_cast<int>(packet->capacity()), &len);
-#else
-  if (!IsExternalAuthActive()) {
-    res = ProtectRtp(data, len, static_cast<int>(packet->capacity()), &len);
-  } else {
-    updated_options.packet_time_params.rtp_sendtime_extension_id =
-        rtp_abs_sendtime_extn_id_;
-    res = ProtectRtp(data, len, static_cast<int>(packet->capacity()), &len,
-                     &updated_options.packet_time_params.srtp_packet_index);
-    // If protection succeeds, let's get auth params from srtp.
-    if (res) {
-      uint8_t* auth_key = nullptr;
-      int key_len = 0;
-      res = GetRtpAuthParams(
-          &auth_key, &key_len,
-          &updated_options.packet_time_params.srtp_auth_tag_len);
-      if (res) {
-        updated_options.packet_time_params.srtp_auth_key.resize(key_len);
-        updated_options.packet_time_params.srtp_auth_key.assign(
-            auth_key, auth_key + key_len);
-      }
-    }
-  }
-#endif
-  if (!res) {
-    int seq_num = -1;
-    uint32_t ssrc = 0;
-    cricket::GetRtpSeqNum(data, len, &seq_num);
-    cricket::GetRtpSsrc(data, len, &ssrc);
-    RTC_LOG(LS_ERROR) << "Failed to protect RTP packet: size=" << len
-                      << ", seqnum=" << seq_num << ", SSRC=" << ssrc;
-    return false;
-  }
+  return SendPacket(/*rtcp=*/false, packet, options, flags);
 
-  // Update the length of the packet now that we've added the auth tag.
-  packet->SetSize(len);
-  return SendPacket(/*rtcp=*/false, packet, updated_options, flags);
+  
+//   if (!IsSrtpActive()) {
+//     RTC_LOG(LS_ERROR)
+//         << "Failed to send the packet because SRTP transport is inactive.";
+//     return false;
+//   }
+//   rtc::PacketOptions updated_options = options;
+//   TRACE_EVENT0("webrtc", "SRTP Encode");
+//   bool res;
+//   uint8_t* data = packet->data();
+//   int len = rtc::checked_cast<int>(packet->size());
+
+//   // int payload_type=-1;
+//   // cricket::GetRtpPayloadType(data,len, &payload_type);
+//   // if(payload_type==50){//sandy: Duplicate packets are sent without protection such that they are not dropped 
+//   //   return SendPacket(/*rtcp=*/false, packet, updated_options, flags);  
+//   // }
+// // If ENABLE_EXTERNAL_AUTH flag is on then packet authentication is not done
+// // inside libsrtp for a RTP packet. A external HMAC module will be writing
+// // a fake HMAC value. This is ONLY done for a RTP packet.
+// // Socket layer will update rtp sendtime extension header if present in
+// // packet with current time before updating the HMAC.
+// #if !defined(ENABLE_EXTERNAL_AUTH)
+//   res = ProtectRtp(data, len, static_cast<int>(packet->capacity()), &len);
+// #else
+//   if (!IsExternalAuthActive()) {
+//     res = ProtectRtp(data, len, static_cast<int>(packet->capacity()), &len);
+//   } else {
+//     updated_options.packet_time_params.rtp_sendtime_extension_id =
+//         rtp_abs_sendtime_extn_id_;
+//     res = ProtectRtp(data, len, static_cast<int>(packet->capacity()), &len,
+//                      &updated_options.packet_time_params.srtp_packet_index);
+//     // If protection succeeds, let's get auth params from srtp.
+//     if (res) {
+//       uint8_t* auth_key = nullptr;
+//       int key_len = 0;
+//       res = GetRtpAuthParams(
+//           &auth_key, &key_len,
+//           &updated_options.packet_time_params.srtp_auth_tag_len);
+//       if (res) {
+//         updated_options.packet_time_params.srtp_auth_key.resize(key_len);
+//         updated_options.packet_time_params.srtp_auth_key.assign(
+//             auth_key, auth_key + key_len);
+//       }
+//     }
+//   }
+// #endif
+//   if (!res) {
+//     int seq_num = -1;
+//     uint32_t ssrc = 0;
+//     cricket::GetRtpSeqNum(data, len, &seq_num);
+//     cricket::GetRtpSsrc(data, len, &ssrc);
+//     RTC_LOG(LS_ERROR) << "Failed to protect RTP packet: size=" << len
+//                       << ", seqnum=" << seq_num << ", SSRC=" << ssrc;
+//     return false;
+//   }
+
+//   // Update the length of the packet now that we've added the auth tag.
+//   packet->SetSize(len);
+//   return SendPacket(/*rtcp=*/false, packet, updated_options, flags);
 }
 
 bool SrtpTransport::SendRtcpPacket(rtc::CopyOnWriteBuffer* packet,
@@ -218,6 +227,12 @@ void SrtpTransport::OnRtpPacketReceived(rtc::CopyOnWriteBuffer packet,
   char* data = packet.data<char>();
   int len = rtc::checked_cast<int>(packet.size());
   int seq_num = -1;
+  int payload_type = -1;
+
+  cricket::GetRtpSeqNum(data, len, &seq_num);
+  cricket::GetRtpPayloadType(data,len, &payload_type);
+  original_payload_type=mpcollector_->MpGetPayloadType();
+  // RTC_LOG(INFO)<<"sandyasymmetry the packet received packet on rtp_read seq= "<<seq_num<<" pathid= "<<packet.GetPathid()<<" payload_type "<<payload_type;
   /*
   sandy: When the redundent scheduler in place, we filter out packets with same sequence numbers as we only use two paths in network and think
   it as one single path.
@@ -239,26 +254,37 @@ void SrtpTransport::OnRtpPacketReceived(rtc::CopyOnWriteBuffer packet,
   /*
   */
   //sandy: For dual stream you have to come up with different appraoch to drop packets
-  if (!UnprotectRtp(data, len, &len)){// && packet.GetPathid()!=2) {//sandy : I am commeting this as packet from secondary path might be same
-    //as primary and cause some problems
-    // int seq_num = -1;
-    uint32_t ssrc = 0;
-    // cricket::GetRtpSeqNum(data, len, &seq_num);
-    cricket::GetRtpSsrc(data, len, &ssrc);
+  
+  // if (!UnprotectRtp(data, len, &len) && payload_type!=50){// && payload_type!=RtpPacketMediaType::KDupPacket){// && packet.GetPathid()!=2) {//sandy : I am commeting this as packet from secondary path might be same
+  //   RTC_LOG(INFO)<<"sandyasymmetry the packet received packet on rtp_read seq= "<<seq_num<<" pathid= "<<packet.GetPathid()<<"Dropped due to unprotection"<< 
+  //   "payload_type "<<payload_type;
+  //   //as primary and cause some problems
+  //   // int seq_num = -1;
+  //   uint32_t ssrc = 0;
+  //   // cricket::GetRtpSeqNum(data, len, &seq_num);
+  //   cricket::GetRtpSsrc(data, len, &ssrc);
 
-    // Limit the error logging to avoid excessive logs when there are lots of
-    // bad packets.
-    const int kFailureLogThrottleCount = 100;
-    if (decryption_failure_count_ % kFailureLogThrottleCount == 0) {
-      RTC_LOG(LS_ERROR) << "Failed to unprotect RTP packet: size=" << len
-                        << ", seqnum=" << seq_num << ", SSRC=" << ssrc
-                        << ", previous failure count: "
-                        << decryption_failure_count_ 
-                        <<" pathid "<< packet.GetPathid();
-    }
-    ++decryption_failure_count_;
-    return;
-  }
+  //   // Limit the error logging to avoid excessive logs when there are lots of
+  //   // bad packets.
+  //   const int kFailureLogThrottleCount = 100;
+  //   if (decryption_failure_count_ % kFailureLogThrottleCount == 0) {
+  //     RTC_LOG(LS_ERROR) << "Failed to unprotect RTP packet: size=" << len
+  //                       << ", seqnum=" << seq_num << ", SSRC=" << ssrc
+  //                       << ", previous failure count: "
+  //                       << decryption_failure_count_ 
+  //                       <<" pathid "<< packet.GetPathid();
+  //   }
+  //   ++decryption_failure_count_;
+  //   return;
+  // }
+  // if(payload_type==50){
+  //     // int new_payload_type = -1;
+  //     //sandy: Change the payload to original value
+  //     bool res=cricket::SetRtpPayloadType(data, original_payload_type);
+  //     // cricket::GetRtpPayloadType(data,len, &new_payload_type);
+  //     // RTC_LOG(INFO)<<"sandyasymmetry the packet received packet on rtp_read seq= "<<seq_num<<" pathid= "<<packet.GetPathid()<<" dup type "<<payload_type<<" New type "<<new_payload_type;
+  //     RTC_DCHECK(res==true);
+  // }
   packet.SetSize(len);
   DemuxPacket(std::move(packet), packet_time_us,packet.GetPathid());
 }

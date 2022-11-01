@@ -44,6 +44,8 @@ void RtxReceiveStream::OnRtpPacket(const RtpPacketReceived& rtx_packet) {
   if (rtp_receive_statistics_) {
     rtp_receive_statistics_->OnRtpPacket(rtx_packet);
   }
+  if(rtx_packet.PayloadType()==50)
+    return;
   rtc::ArrayView<const uint8_t> payload = rtx_packet.payload();
 
   if (payload.size() < kRtxHeaderSize) {

@@ -11,11 +11,12 @@
 #include "modules/rtp_rtcp/source/rtcp_sender.h"
 
 #include <string.h>  // memcpy
-
+#include <stdio.h>
 #include <algorithm>  // std::min
 #include <memory>
 #include <utility>
-
+#include <iostream>
+#include <charconv>
 #include "api/rtc_event_log/rtc_event_log.h"
 #include "logging/rtc_event_log/events/rtc_event_rtcp_packet_outgoing.h"
 #include "modules/rtp_rtcp/source/rtcp_packet/app.h"
@@ -41,6 +42,8 @@
 #include "rtc_base/logging.h"
 #include "rtc_base/numerics/safe_conversions.h"
 #include "rtc_base/trace_event.h"
+#include "api/mp_collector.h"
+#include "api/mp_global.h"
 
 uint32_t rtcp_pcount=0;
 namespace webrtc {
@@ -207,8 +210,13 @@ RTCPSender::RTCPSender(const RtpRtcpInterface::Configuration& config)
   builders_[kRtcpTmmbn] = &RTCPSender::BuildTMMBN;
   builders_[kRtcpNack] = &RTCPSender::BuildNACK;
   builders_[kRtcpAnyExtendedReports] = &RTCPSender::BuildExtendedReports;
+  builders_[kAppSubtypeQUIC] = &RTCPSender::BuildAPPQUIC;//sandy: Send the Receiver feedback about MpWebRTC
   builders_[kAppSubtypeMpHalf] = &RTCPSender::BuildAPPHalf;//sandy: Send the Receiver feedback about MpWebRTC
   builders_[kAppSubtypeMpFull] = &RTCPSender::BuildAPPFull;//sandy: Send the Receiver feedback about MpWebRTC
+  builders_[kAppSubtypeMPFrameRate] = &RTCPSender::BuildAPPMPFrameRate;//sandy: Send the Receiver feedback about MpWebRTC
+  builders_[kAppSubtypeMpAsymmetry] = &RTCPSender::BuildAPPMpAsymmetry;//sandy: Send the Receiver feedback about MpWebRTC
+  builders_[kAppSubtypeMpRR1] = &RTCPSender::BuildAPPMpRR1;//sandy: Send the Receiver feedback about MpWebRTC
+  builders_[kAppSubtypeMpRR2] = &RTCPSender::BuildAPPMpRR2;//sandy: Send the Receiver feedback about MpWebRTC  
 }
 
 RTCPSender::~RTCPSender() {}
@@ -663,10 +671,86 @@ std::unique_ptr<rtcp::RtcpPacket> RTCPSender::BuildTMMBN(//sandy: not sent
 
   return std::unique_ptr<rtcp::RtcpPacket>(tmmbn);
 }
+std::unique_ptr<rtcp::RtcpPacket> RTCPSender::BuildAPPQUIC(const RtcpContext& ctx,const int pathid) {
+  RTC_LOG(LS_INFO)<<"sandyofo creating App for QUIC";
+  rtcp::App* app = new rtcp::App();
+  app->SetPathId(pathid);
+  app->SetSenderSsrc(ssrc_);
+  app->SetSubType(01);
+  app->SetName(0x73616e64);//sandy: I am sending name as "sand"->0x73616e64(ASCII)
+  uint8_t buf[4]={'c','c','c','c'};
+  app->SetData(buf,4);//sandy: I am just sending data of 0 for now
+  return std::unique_ptr<rtcp::RtcpPacket>(app);
+}
+
+std::unique_ptr<rtcp::RtcpPacket> RTCPSender::BuildAPPMpAsymmetry(const RtcpContext& ctx,const int pathid){
+  uint8_t* buf =(uint8_t*) (malloc(sizeof(uint8_t) * 4));
+  std::string tmp = std::to_string(mpcollector_->MpGetAsymmetryPackets());
+  char const *num_char = tmp.c_str();
+  std::memcpy(buf,num_char,tmp.length());
+  rtcp::App* app = new rtcp::App();
+  app->SetPathId(pathid);
+  app->SetSenderSsrc(ssrc_);
+  app->SetSubType(03);
+  app->SetName(0x73616e64);//sandy: I am sending name as "sand"->0x73616e64(ASCII)
+  RTC_LOG(LS_INFO)<<"sandyasymmetry creating App for asymmetry packets "<<(uint8_t)mpcollector_->MpGetAsymmetryPackets();
+  app->SetData(buf,4);//sandy: I am just sending data of 0 for now
+  return std::unique_ptr<rtcp::RtcpPacket>(app);
+}
+
+std::unique_ptr<rtcp::RtcpPacket> RTCPSender::BuildAPPMpRR1(const RtcpContext& ctx,const int pathid){
+  uint8_t* buf =(uint8_t*) (malloc(sizeof(uint8_t) * 4));
+  std::string tmp = std::to_string(mpcollector_->MpGetAsymmetryRR1());
+  char const *num_char = tmp.c_str();
+  std::memcpy(buf,num_char,tmp.length());
+  rtcp::App* app = new rtcp::App();
+  app->SetPathId(pathid);
+  app->SetSenderSsrc(ssrc_);
+  app->SetSubType(04);
+  app->SetName(0x73616e64);//sandy: I am sending name as "sand"->0x73616e64(ASCII)
+  // RTC_LOG(LS_INFO)<<"sandyasymmetry RR1 "<<*buf;
+  app->SetData(buf,4);//sandy: I am just sending data of 0 for now
+  return std::unique_ptr<rtcp::RtcpPacket>(app);
+}
+
+std::unique_ptr<rtcp::RtcpPacket> RTCPSender::BuildAPPMpRR2(const RtcpContext& ctx,const int pathid){
+  uint8_t* buf =(uint8_t*) malloc(sizeof(uint8_t) * 4);
+  std::string tmp = std::to_string(mpcollector_->MpGetAsymmetryRR2());
+  char const *num_char = tmp.c_str();
+  std::memcpy(buf,num_char,tmp.length()); 
+  rtcp::App* app = new rtcp::App();
+  app->SetPathId(pathid);
+  app->SetSenderSsrc(ssrc_);
+  app->SetSubType(05);
+  app->SetName(0x73616e64);//sandy: I am sending name as "sand"->0x73616e64(ASCII)
+  // RTC_LOG(LS_INFO)<<"sandyasymmetry creating App for RR2 "<<*buf;
+  app->SetData(buf,4);//sandy: I am just sending data of 0 for now
+  return std::unique_ptr<rtcp::RtcpPacket>(app);
+}
+
+std::unique_ptr<rtcp::RtcpPacket> RTCPSender::BuildAPPMPFrameRate(const RtcpContext& ctx,const int pathid) {
+  
+  
+
+  const uint8_t* buf =(uint8_t*) malloc(sizeof(uint8_t) * 4);
+  uint8_t* fps = (uint8_t*)buf; // cast is here
+  fps[0] =(uint8_t)mpcollector_->MpGetFrameRate();
+  // RTC_LOG(LS_INFO)<<"sandyframerate creating App for Frame Rate"<<*buf;
+
+  
+  rtcp::App* app = new rtcp::App();
+  app->SetPathId(pathid);
+  app->SetSenderSsrc(ssrc_);
+  app->SetSubType(02);
+  app->SetName(0x73616e64);//sandy: I am sending name as "sand"->0x73616e64(ASCII)
+  app->SetData(buf,4);//sandy: I am just sending data of 0 for now
+  return std::unique_ptr<rtcp::RtcpPacket>(app);
+}
 
 std::unique_ptr<rtcp::RtcpPacket> RTCPSender::BuildAPPHalf(const RtcpContext& ctx,const int pathid) {
   RTC_LOG(LS_INFO)<<"sandyofo creating App specific message";
   rtcp::App* app = new rtcp::App();
+  app->SetPathId(pathid);
   app->SetSenderSsrc(ssrc_);
   app->SetSubType(01);
   app->SetName(0x73616e64);//sandy: I am sending name as "sand"->0x73616e64(ASCII)
@@ -678,6 +762,7 @@ std::unique_ptr<rtcp::RtcpPacket> RTCPSender::BuildAPPHalf(const RtcpContext& ct
 std::unique_ptr<rtcp::RtcpPacket> RTCPSender::BuildAPPFull(const RtcpContext& ctx,const int pathid) {
   RTC_LOG(LS_INFO)<<"sandyofo creating App specific message";
   rtcp::App* app = new rtcp::App();
+  app->SetPathId(pathid);
   app->SetSenderSsrc(ssrc_);
   app->SetSubType(01);
   app->SetName(0x73616e64);//sandy: I am sending name as "sand"->0x73616e64(ASCII)

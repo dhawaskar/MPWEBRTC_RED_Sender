@@ -187,6 +187,13 @@ bool GetRtpPayloadType(const void* data, size_t len, int* value) {
   return true;
 }
 
+bool SetRtpPayloadType(void* data,int value) {
+  if (!SetUint8(data, kRtpPayloadTypeOffset, value)) {
+    return false;
+  }
+  return true;
+}
+
 bool GetRtpSeqNum(const void* data, size_t len, int* value) {
   if (len < kMinRtpPacketLen) {
     return false;

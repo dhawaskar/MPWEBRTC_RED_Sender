@@ -1152,7 +1152,7 @@ void Call::OnStartRateUpdate(DataRate start_rate) {
 
 void Call::OnTargetTransferRate(TargetTransferRate msg) {
   RTC_DCHECK_RUN_ON(send_transport_queue());
-
+  // RTC_DCHECK(msg.target_rate.bps()!=0);
   uint32_t target_bitrate_bps = msg.target_rate.bps();
   // For controlling the rate of feedback messages.
   receive_side_cc_.OnBitrateChanged(target_bitrate_bps);
@@ -1292,7 +1292,7 @@ PacketReceiver::DeliveryStatus Call::DeliverRtp(MediaType media_type,
                                                 rtc::CopyOnWriteBuffer packet,
                                                 int64_t packet_time_us,int pathid) {
   RTC_DCHECK(packet.GetPathid()>0);
-  // RTC_LOG(INFO)<<"sandystats received packet on "<<packet.GetPathid()<<":"<<pathid;
+  
 
   TRACE_EVENT0("webrtc", "Call::DeliverRtp");
   
@@ -1348,6 +1348,8 @@ PacketReceiver::DeliveryStatus Call::DeliverRtp(MediaType media_type,
     */
     RTPHeader header;
     parsed_packet.GetHeader(&header);
+    // RTC_LOG(INFO)<<"sandyasymmetry the packet path id"<<header.extension.sandy<<" connection level id "<<parsed_packet.pathid<<" sequence number "<<header.sequenceNumber<< 
+    // " MPSubflow sequence number "<<header.extension.mpflowseqnum;
     if(header.extension.sandy!=parsed_packet.pathid){
       int is_audio=0;
       if(media_type == MediaType::AUDIO)
@@ -1403,6 +1405,10 @@ PacketReceiver::DeliveryStatus Call::DeliverRtp(MediaType media_type,
   } else if (media_type == MediaType::VIDEO) {
     parsed_packet.set_payload_type_frequency(kVideoPayloadTypeFrequency);
     if (video_receiver_controller_.OnRtpPacket(parsed_packet)) {
+      if(parsed_packet.PayloadType()==50){
+        // RTC_LOG(INFO)<<"sandyasymmetry received a duplicate packet but skipping it "<<parsed_packet.PayloadType();
+        return DELIVERY_OK;
+      }
       received_bytes_per_second_counter_.Add(length);
       received_video_bytes_per_second_counter_.Add(length);
       event_log_->Log(
@@ -1484,9 +1490,9 @@ void Call::NotifyBweOfReceivedPacket(const RtpPacketReceived& packet,
   //sandy:Mp-WebRTC
   if(header.extension.hassandy){
     packet_msg.pathid=header.extension.sandy;
-    RTC_LOG(LS_INFO)<<"sandy the path id :"<<packet.pathid<<" in header: "<<header.extension.sandy;
+    // RTC_LOG(LS_INFO)<<"sandy the path id :"<<packet.pathid<<" in header: "<<header.extension.sandy;
   }else{
-    RTC_DLOG(LS_ERROR)<<"sandyrtp received RTP packet path id not set";
+    // RTC_DLOG(LS_ERROR)<<"sandyrtp received RTP packet path id not set";
     packet_msg.pathid=1;
   }
 
@@ -1510,72 +1516,6 @@ void Call::NotifyBweOfReceivedPacket(const RtpPacketReceived& packet,
   // For audio, we only support send side BWE.
   if (media_type == MediaType::VIDEO ||
       (use_send_side_bwe && header.extension.hasTransportSequenceNumber)) {
-    
-
-
-
-    // if(header.sequenceNumber>header.extension.mpflowseqnum && header.extension.hasmpflowseqnum && 
-    //   header.extension.mpflowseqnum>0 && header.extension.hasTransportSequenceNumber && header.extension.hasMpTransportSequenceNumber && 
-    //   header.extension.transportSequenceNumber!=header.extension.mptransportSequenceNumber && mpcollector_->MpISsecondPathOpen()){
-    //   uint16_t Mpseqnext=0;
-    //   if(!Mpseq_ || header.extension.transportSequenceNumber<Mpseq_){
-    //     Mpseq_=header.extension.transportSequenceNumber;
-    //     /*sandy:Retranmitted packets always have higher sequence numbers and
-    //     hence do not worry about differfentiating the retransmitted and out of order packets. Simply set the Mpseq_ with 
-    //     smallest value.*/
-    //   }
-    //   Mphistory_.insert(std::make_pair(header.extension.transportSequenceNumber,packet));
-    //   // RTC_LOG(INFO)<<"sandyofo let us insert the transport feedback "<<header.extension.transportSequenceNumber << 
-    //   // " MP: "<<header.extension.mptransportSequenceNumber;
-    //   Mpcount_++;
-    //   if(Mpcount_>MpReorderingCount_){
-    //     Mpseqnext=Mpseq_;
-    //     //RTC_LOG(INFO)<<"sandyofo let us send the transport feedback "<<Mpcount_<<" start= "<<Mpseq_<<" cur "<<Mpseqnext;
-    //     int i;
-    //     for(i=0;i<MpReorderingCount_;i++){
-    //       auto it=Mphistory_.find(Mpseqnext);
-    //       if(it!=Mphistory_.end()){
-    //         if(Mpseqlastlost && Mpseqlastlost==Mpseqnext){
-    //           Mpseqnotfoundcount=0;
-    //         }
-    //         //RTC_LOG(INFO)<<"sandyofo sending transport feedback "<<Mpseqnext;
-    //         RTPHeader Mpheader;
-    //         it->second.GetHeader(&Mpheader);
-    //         receive_side_cc_.OnReceivedPacket(
-    //           it->second.arrival_time_ms(), it->second.payload_size() + it->second.padding_size(),
-    //           Mpheader);
-    //         Mphistory_.erase(it->first);
-    //         Mpcount_-=1;
-    //       }else{
-    //         Mpseqnotfoundcount++;
-    //         Mpseqlastlost=Mpseqnext;
-    //         Mpseq_=Mpseqnext;
-    //         if(Mpcount_>MpReorderingCount_){
-    //           Mpcount_/=2;
-    //         }
-    //         if(Mpseqnotfoundcount>MpReorderingwaitCount_){
-    //           Mpseqnotfoundcount=0;
-    //           Mpseqnext++;
-    //           Mpcount_=0;
-    //           break;
-    //         }
-    //         break;
-    //       }
-    //       Mpseqnext++;
-    //     }
-    //     if(i==MpReorderingCount_)
-    //       Mpcount_=0;
-    //     Mpseq_=Mpseqnext;
-    //   }
-    // }else{//No Multipath so no need to worry about reordering
-    //   receive_side_cc_.OnReceivedPacket(
-    //         packet.arrival_time_ms(), packet.payload_size() + packet.padding_size(),
-    //         header);
-    // }
-
-
-
-
     receive_side_cc_.OnReceivedPacket(
             packet.arrival_time_ms(), packet.payload_size() + packet.padding_size(),
             header);

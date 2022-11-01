@@ -1442,7 +1442,7 @@ void VideoStreamEncoder::SendKeyFrame() {
     encoder_queue_.PostTask([this] { SendKeyFrame(); });
     return;
   }
-  RTC_LOG(INFO)<<"sandy requesting key frame";
+  RTC_LOG(INFO)<<"sandy sending key frame";
   RTC_DCHECK_RUN_ON(&encoder_queue_);
   TRACE_EVENT0("webrtc", "OnKeyFrameRequest");
   RTC_DCHECK(!next_frame_types_.empty());
@@ -1712,7 +1712,7 @@ void VideoStreamEncoder::OnBitrateUpdated(DataRate target_bitrate,
 
   uint32_t framerate_fps = GetInputFramerateFps();
   frame_dropper_.SetRates((target_bitrate.bps() + 500) / 1000, framerate_fps);
-  mpcollector_->MpSetFrameRate(framerate_fps);//sandy: Knowing the framerate
+  
 
   EncoderRateSettings new_rate_settings{
       VideoBitrateAllocation(), static_cast<double>(framerate_fps),

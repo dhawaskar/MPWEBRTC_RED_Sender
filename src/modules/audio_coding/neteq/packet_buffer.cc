@@ -27,6 +27,8 @@
 #include "rtc_base/checks.h"
 #include "rtc_base/logging.h"
 #include "rtc_base/numerics/safe_conversions.h"
+#include "api/mp_collector.h"
+#include "api/mp_global.h"
 
 namespace webrtc {
 namespace {
@@ -99,6 +101,7 @@ int PacketBuffer::InsertPacket(Packet&& packet, StatisticsCalculator* stats) {
     Flush();
     stats->FlushedPacketBuffer();
     RTC_LOG(LS_WARNING) << "Packet buffer flushed";
+    RTC_LOG(LS_INFO)<<" sandyofo requesting key frame"<<mpcollector_->MpGetAsymmetryPackets();
     return_val = kFlushed;
   }
 
@@ -163,6 +166,7 @@ int PacketBuffer::InsertPacketList(
     }
     int return_val = InsertPacket(std::move(packet), stats);
     if (return_val == kFlushed) {
+       RTC_LOG(LS_INFO)<<" sandyofo requesting key frame"<<mpcollector_->MpGetAsymmetryPackets();
       // The buffer flushed, but this is not an error. We can still continue.
       flushed = true;
     } else if (return_val != kOK) {
